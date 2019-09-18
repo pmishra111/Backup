@@ -1,0 +1,58 @@
+public class ActivityComment_ext {
+    public Activity_Comment__c ActCmt{get;set;}
+    private ApexPages.StandardController stdCtrl{get;set;}
+    public ActivityComment_ext(){
+   ActCmt= new Activity_Comment__c();      
+        
+        ActCmt.Project_Activity__c = ApexPages.currentPage().getParameters().get('ActId');
+       
+        
+    }
+    
+    public PageReference onsave()
+    {
+        try{
+            if(ActCmt != null)
+            {
+               insert ActCmt; 
+            }
+            string test = System.URL.getSalesforceBaseUrl().toExternalForm() + '/'+ApexPages.currentPage().getParameters().get('ActId');
+            PageReference pageRef = new PageReference('/'+ApexPages.currentPage().getParameters().get('ActId'));    
+            return pageRef;
+        }
+        catch(Exception e)
+        {
+            return null; 
+        }
+        
+        
+    }
+    public PageReference cancel()
+    {
+        string test = System.URL.getSalesforceBaseUrl().toExternalForm() + '/'+ApexPages.currentPage().getParameters().get('ActId');
+        PageReference pageRef = new PageReference(test);    
+        pageRef.setRedirect(true);
+        return pageRef;        
+    }
+    
+    public PageReference onsaveAndNew()
+    {
+        
+        try{
+            if(ActCmt != null)
+            {
+               insert ActCmt; 
+            }
+            //string test = System.URL.getSalesforceBaseUrl().toExternalForm() + '/'+ApexPages.currentPage().getParameters().get('ActId');
+        PageReference pageRef = new PageReference('/apex/ActivityComment?ActId='+ApexPages.currentPage().getParameters().get('ActId')); 
+            pageRef.setRedirect(true);
+        return pageRef;
+        }
+        catch(Exception e)
+        {
+            return null; 
+        }
+       
+    }
+    
+}

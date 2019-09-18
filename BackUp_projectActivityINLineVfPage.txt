@@ -1,0 +1,39 @@
+<apex:component controller="CommentsController" allowDML="true" >
+  <script type="text/javascript">
+function confirmDeactivate() {
+return confirm('Are you sure?');
+    parent.location.top.reload();
+}   
+ parent.location.top.reload();    
+</script>    
+<apex:componentBody >
+    
+    <apex:form >
+        <apex:pageBlock title="" >
+            <apex:pageBlockButtons location="top">
+                <apex:commandButton value="New"  oncomplete="window.top.location ='{!$Site.BaseUrl}/{!Label}={!auto}&retURL=%2F{!activityId}'" />
+            </apex:pageBlockButtons>
+            <apex:pageBlockTable columnsWidth="(7%,93%)"  value="{!Comments}" var="comment"> 
+                <apex:column headerValue="Action"> 
+                    <apex:commandLink value="Edit" oncomplete="window.top.location = '{!$Site.BaseUrl}/{!CommentId}/e?retURL=%2F{!activityId}'">
+                        <apex:param name="CommentId_d" value="{!comment.Id}" assignTo="{!CommentId}"/>
+                      </apex:commandLink>&nbsp; | &nbsp;
+                  <apex:commandLink action="{!deleteComment}" value="Del" onclick="if(!confirmDeactivate()) return false; ">
+                        <apex:param name="CommentId_d" value="{!comment.Id}" />
+                    </apex:commandLink> 
+                 <!--   <apex:commandLink action="{!makePublicPrivate}" value="{!comment.PublicPrivateAction}">
+                        <apex:param name="CommentId_p" value="{!comment.cComment.Id}" />
+                    </apex:commandLink> -->
+                </apex:column>
+              <!--   <apex:column headerValue="Public" value="" />  -->
+                <apex:column headerValue="Comments">
+                    <apex:outputText style="font-weight: 700;" value="Created By:"/>&nbsp;
+                    <apex:outputText style="font-weight: 700;" value="{!comment.CreatedBy.Name}"/>&nbsp;      
+                    <apex:outputText style="font-weight: 700;" value="{!comment.CreatedDate}"/><br/>
+                    <apex:outputText escape="false" value="{!comment.Comment_Description__c}"/>
+                </apex:column>
+            </apex:pageBlockTable>
+        </apex:pageBlock>   
+    </apex:form>    
+</apex:componentBody>
+</apex:component>

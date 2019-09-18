@@ -1,0 +1,86 @@
+/*----------------------------------------------------------------------------------------------------
+Created By: prakhar mishra
+Description: This class is a controller For maintaining the functionality of Activity Comment.
+Reffered In: Project_ActivityComment_Component VF Page         
+History:      
+
+Modified By:                 Description(with Reference ticket): SR-000319              Modified Date:
+-----------------------------------------------------------------------------------------------------------------*/
+
+public class Project_ActivityCommentController {
+    public List<Activity_Comment__c> commentList{get;set;}
+    public Activity_Comment__c ActCmt{get;set;}
+    public string URLEditComment{get;set;}
+    public id CommentId{get;set;}
+    public Id activityId{get;set;}
+    public Id IdNew{get;set;}
+    public String URLNewComment{get;set;}
+    Public String Label{get;set;}
+    public String auto{get;set;}
+    public id test{get;set;}
+    
+    public Project_ActivityCommentController(){
+         ActCmt= new Activity_Comment__c();  
+        activityId =  ApexPages.currentPage().getParameters().get('Id');
+      /*   Label=System.Label.ProjectActivity;
+        IdNew = ApexPages.currentPage().getParameters().get('id');
+        system.debug('IdNew------>'+IdNew);
+        auto = [Select Name from Activity__c where id = :IdNew].Name;
+        System.debug('lstName'+auto);
+      // URLNewComment= System.URL.getSalesforceBaseUrl().toExternalForm()+'/'+'a4b/e?'+Label+'='+auto;
+        system.debug('CommentId====>>'+CommentId);*/
+        
+        
+    
+    }
+    //System.debug('activityId'+activityId);
+    public void EditComment() {
+         CommentId = ApexPages.currentPage().getParameters().get('id');
+         test= ApexPages.currentPage().getParameters().get('CommentId_d');
+         system.debug('tes====>>'+test);
+        //URLEditComment = System.URL.getSalesforceBaseUrl().toExternalForm()+'/'+test+'/e?retURL=%2F'+activityId;
+        //'/apex/Project_NewActivityComment?ActId='+IdNew
+       // URLEditComment = System.URL.getSalesforceBaseUrl().toExternalForm()+'/apex/Project_EditActivityComment?ActId'+'/'+test+'/e?retURL=%2F'+activityId;
+       URLEditComment = System.URL.getSalesforceBaseUrl().toExternalForm()+'/apex/Project_EditActivityComment?ActId='+ApexPages.currentPage().getParameters().get('CommentId_d');
+        
+        system.debug('URLEditComment=='+URLEditComment);
+        //PageReference reference = new PageReference(URLEditComment);
+        //reference.setRedirect(true);
+			
+        //return URLEditComment;
+
+    }
+
+
+    public List<Activity_Comment__c> getComments() {
+        commentList = [select Comment_Description__c,CreatedBy.Name,CreatedDate from Activity_Comment__c where Project_Activity__c = :activityId order by CreatedDate Desc];
+        system.debug('commentList==='+commentList);
+        return commentList;
+    }
+    
+    
+    public void NewComment() {
+        IdNew = ApexPages.currentPage().getParameters().get('id');
+        system.debug('IdNew------>'+IdNew);
+        string auto = [Select Name from Activity__c where id = :IdNew].Name;
+        System.debug('lstName'+auto);
+       URLNewComment= System.URL.getSalesforceBaseUrl().toExternalForm()+'/apex/Project_NewActivityComment?ActId='+IdNew ;
+      System.debug('URLNewComment'+URLNewComment);
+       
+    }
+    public PageReference deleteComment() {
+           CommentId = ApexPages.currentPage().getParameters().get('CommentId_d');
+            system.debug('CommentId--->'+CommentId);
+            //list<Activity_Comment__c> obj= [select id,Comment_Description__c from Activity_Comment__c where id=: CommentId];
+            //system.debug('obj===>'+obj);
+            database.delete(CommentId);
+            //delete obj;
+        
+        //PageReference pageRef = new PageReference('/'+activityId);
+       // pageRef.setredirect(true);
+        return null;
+       
+    }
+
+
+}

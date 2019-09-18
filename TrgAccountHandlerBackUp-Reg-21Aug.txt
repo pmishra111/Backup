@@ -1,0 +1,1183 @@
+/*
+Description: This class will handle all the functionality of Triggers related to Account.
+Test class              trgAccount_test
+Created By              Created Date
+Mohit Sharma            06-Mar-2017
+
+History:
+Sazid Ali; Desc: Update global access for Admin Access as far the requirement.     10-Aug-2018 
+Radhe S  ; Desc: Make Global_Access__c true on Account Creation                    21 Aug 2018  
+Radhe S  ; Desc: Updated 'handleApexRecordSharing()' Method for ACC: 8774          17-Apr-2019
+*/
+public class trgAccountHandler {
+    public void onBeforeInsert(List < Account > lstAcc) {
+        onInsertBefore(lstAcc);
+    }
+
+    //public void onAfterInsert(){}
+
+    public void onBeforeUpdate(List < Account > lstAcc, Map < Id, Account > mapOldAcc) {
+        onUpdateBefore(lstAcc, mapOldAcc);
+        if (clsRecusrsiveCheck.bypassdoNotSopportCondUpdateBefore == false)
+            doNotSopportCondUpdateBefore(lstAcc, mapOldAcc);
+        partialRestrictionCondBeforeUpdate(lstAcc, mapOldAcc);
+        RestrictDownloadUpdateBefore(lstAcc, mapOldAcc);
+    }
+    public void PopulateAccountRegion(List < Account > lstAccount) {
+        for (account eachAccount: lstAccount) {
+            System.debug('@eachAccount.BillingCountryCode' + eachAccount.BillingCountryCode);
+            AccountCountryRegion__c ObjAccCustom = AccountCountryRegion__c.getInstance(eachAccount.BillingCountryCode);
+            if (ObjAccCustom != null) {
+                eachAccount.Region__c = ObjAccCustom.region__c;
+                System.debug('ObjAccCustom' + ObjAccCustom);
+            } else {
+                eachAccount.Region__c = '';
+            }
+            System.debug('@Region' + eachAccount.Region__c);
+
+        }
+    }
+
+   
+    public static void onAfterUpdate(List < Account > lstAcc, Map < Id, Account > mapOldAcc) {
+        onUpdateAfter(lstAcc, mapOldAcc);
+    }
+
+    public void onBeforeDelete(List < Account > lstOldAcc) {
+        onDeleteBefore(lstOldAcc);
+    }
+
+   
+    void onInsertBefore(List < Account > lstAcc) {
+        if (lstAcc != null && lstAcc.size() > 0) {
+            Id recordTypeId = Schema.SObjectType.Account.getRecordTypeInfosByName().get('Partner').getRecordTypeId();
+
+            for (Account eachAcc: lstAcc) {
+                //Make Global Access True on Account Creation
+                eachAcc.global_Access__c = true;
+
+                // Added by Gaurav Vishwakarma
+                //Summary: We are validating the Billing Country Code for Account's Lookups --> "New" button (Quick Creation).
+                if (eachAcc.BillingCountryCode == null)
+                    eachAcc.BillingCountryCode.addError('Please select the country name.');
+
+                //Added by Anuj Sahu, to populate the name of user who modifies the exception active service percentage field,
+                //  when a new record is inserted.
+                if (eachAcc.Exception_ASC__c != null)
+                    eachAcc.Exception_Modified_By__c = UserInfo.getUserId();
+
+                // added by sanchit
+                if (eachAcc.Do_Not_Support__c == true) {
+                    if (eachAcc.Comment__c == '' || eachAcc.Comment__c == null)
+                        eachAcc.Comment__c.addError('Comments are mandatory if Do Not Support checkbox is enabled!');
+                    else {
+                        eachAcc.Deployment_Status__c = '';
+                        //Added record type condition.
+                        System.debug('---- eachAcc.RecordTypeId: ' + eachAcc.RecordTypeId + ' :::: ---- recordTypeId: ' + recordTypeId);
+
+                        if (eachAcc.RecordTypeId == recordTypeId) {
+                            System.debug('Account record type id' + eachAcc.RecordTypeId);
+                            eachAcc.Partner_Type_Status__c = 'De-Registered';
+                        }
+                    }
+
+                }
+                //Akshay: added method to validate the Website field.
+                TriggerEnabled__c trigger_CustomSetting = TriggerEnabled__c.getInstance('AccountTriggerWebsiteChecker');
+                if (trigger_CustomSetting != null && trigger_CustomSetting.Active__c == true && !clsRecusrsiveCheck.byPassTrgAccount) {
+                    if (String.isBlank(eachAcc.Website) || String.isEmpty(eachAcc.Website))
+
+                    {
+                        eachAcc.Website.addError('Website field can not be blank. Please insert a valid Website.');
+                    }
+                    if (String.isNotEmpty(eachAcc.Website) && String.isNotBlank(eachAcc.Website) && !validateWebsite(eachAcc.Website.trim())) {
+                        eachAcc.Website.addError('Website is not correct. Please insert in correct format.');
+                    }
+                    if (String.isNotBlank(eachAcc.Website) && String.isNotEmpty(eachAcc.Website))
+                        eachAcc.Website = eachAcc.Website.trim().toLowercase();
+                }
+            }
+        }
+    }
+
+    // Sanchit: Work on do not support checkbox.
+    void doNotSopportCondUpdateBefore(List < Account > lstAcc, Map < Id, Account > mapOldAcc) {
+        Id recordTypeId = Schema.SObjectType.Account.getRecordTypeInfosByName().get('Partner').getRecordTypeId();
+
+        // added by sanchit: unchecking the checkbox "do not support" and saving the record, the field named "comment" should get empty.
+        for (Account eachAcc: lstAcc) {
+            System.debug('eachAcc.Name = ' + eachAcc.Name);
+            System.debug('mapOldAcc.get(eachAcc.Id).Do_Not_Support__c = ' + mapOldAcc.get(eachAcc.Id).Do_Not_Support__c);
+            System.debug('eachAcc.Do_Not_Support__c = ' + eachAcc.Do_Not_Support__c);
+            if (mapOldAcc.get(eachAcc.Id).Do_Not_Support__c == true && eachAcc.Do_Not_Support__c == False) {
+                if (eachAcc.Comment__c == null || eachAcc.Comment__c == '' || eachAcc.Comment__c.equalsIgnoreCase(mapOldAcc.get(eachAcc.Id).Comment__c)) {
+                    eachAcc.Comment__c.addError('Please provide the reason for Renewal of Service!');
+                } else {
+                    system.debug('At time of autopopulating value: Website_Access_Level_Backend__c =' + eachAcc.Website_Access_Level_Backend__c);
+                    system.debug('At time of autopopulating value: Partner_Type_Status_Backend__c =' + eachAcc.Partner_Type_Status_Backend__c);
+
+                    eachAcc.Deployment_Status__c = eachAcc.Website_Access_Level_Backend__c != Null ? eachAcc.Website_Access_Level_Backend__c : '';
+                    eachAcc.Partner_Type_Status__c = eachAcc.Partner_Type_Status_Backend__c != Null ? eachAcc.Partner_Type_Status_Backend__c : '';
+
+                    eachAcc.Exception_ASC__c = eachAcc.Exception_for_Active_Service_Backend__c != null ? eachAcc.Exception_for_Active_Service_Backend__c : '';
+
+
+                    if (eachAcc.Exception_ASC__c == '102' && eachAcc.Expiration_Date_Backend__c != null)
+                        eachAcc.Expiration_Date__c = eachAcc.Expiration_Date_Backend__c != null ? eachAcc.Expiration_Date_Backend__c : null;
+                    else
+                        eachAcc.Expiration_Date__c = eachAcc.Expiration_Date_Backend__c != null ? eachAcc.Expiration_Date_Backend__c : null;
+                }
+            } else if (eachAcc.Do_Not_Support__c == True) {
+                if (eachAcc.Comment__c == null || eachAcc.Comment__c == '') {
+                    eachAcc.Comment__c.addError('Comments are mandatory if Do Not Support checkbox is enabled!');
+                } else {
+                    //eachAcc.Website_Access_Level_Backend__c = mapOldAcc.get(eachAcc.Id).Deployment_Status__c;
+                    eachAcc.Partner_Type_Status_Backend__c = mapOldAcc.get(eachAcc.Id).Partner_Type_Status__c != Null ? mapOldAcc.get(eachAcc.Id).Partner_Type_Status__c : '';
+                    eachAcc.Website_Access_Level_Backend__c = mapOldAcc.get(eachAcc.Id).Deployment_Status__c != Null ? mapOldAcc.get(eachAcc.Id).Deployment_Status__c : '';
+
+                    eachAcc.Exception_for_Active_Service_Backend__c = mapOldAcc.get(eachAcc.Id).Exception_ASC__c != null ? mapOldAcc.get(eachAcc.Id).Exception_ASC__c : '';
+                    eachAcc.Expiration_Date_Backend__c = mapOldAcc.get(eachAcc.Id).Expiration_Date__c != null ? mapOldAcc.get(eachAcc.Id).Expiration_Date__c : null;
+
+                    if (eachAcc.Exception_ASC__c != '102' && (mapOldAcc.get(eachAcc.Id).Do_Not_Support__c == false)) {
+                        eachAcc.Expiration_Date__c = null;
+                    } else if (mapOldAcc.get(eachAcc.Id).Do_Not_Support__c == true && (eachAcc.Expiration_Date__c != mapOldAcc.get(eachAcc.Id).Expiration_Date__c)) {
+                        eachAcc.Expiration_Date__c.addError('Value of Expiration Date field cannot be modified while Do Not Support checkbox is checked !');
+                    }
+
+                    system.debug('At time of storing value: Website_Access_Level_Backend__c =' + eachAcc.Website_Access_Level_Backend__c);
+                    system.debug('At time of storing value: Partner_Type_Status_Backend__c =' + eachAcc.Partner_Type_Status_Backend__c);
+                    eachAcc.Deployment_Status__c = '';
+
+                    System.debug('---- eachAcc.RecordTypeId: ' + eachAcc.RecordTypeId + ' :::: ---- recordTypeId: ' + recordTypeId);
+                    if (eachAcc.RecordTypeId == recordTypeId) {
+                        System.debug('2Account record type id' + eachAcc.RecordTypeId);
+                        eachAcc.Partner_Type_Status__c = 'De-Registered';
+                    }
+                }
+            }
+
+        }
+        clsRecusrsiveCheck.bypassdoNotSopportCondUpdateBefore = true;
+    }
+
+
+    // Gaurav: Work on Restrict download access checkbox.
+    void RestrictDownloadUpdateBefore(List < Account > lstAcc, Map < Id, Account > mapOldAcc) {
+        Id recordTypeId = Schema.SObjectType.Account.getRecordTypeInfosByName().get('Partner').getRecordTypeId();
+
+        for (Account eachAcc: lstAcc) {
+            if (eachAcc.RecordTypeId == recordTypeId) {
+                if (eachAcc.Restrict_Download_Access__c == true) {
+                    System.debug('eachAcc.Name = ' + eachAcc.Name);
+                    if (eachAcc.Exception_ASC__c != '' && eachAcc.Exception_ASC__c != mapOldAcc.get(eachAcc.Id).Exception_ASC__c && mapOldAcc.get(eachAcc.Id).Restrict_Download_Access__c == true && eachAcc.Restrict_Download_Access__c == true) {
+                        eachAcc.adderror('You can not set ASC% < 80 or modify "Exception for Active Service Contract%" as "Restrict Download Access" checkbox is checked');
+                    } else if (eachAcc.Exception_ASC__c != '' && mapOldAcc.get(eachAcc.Id).Restrict_Download_Access__c == False && eachAcc.Restrict_Download_Access__c == True) {
+                        eachAcc.Partner_Type_Status_Backend__c = mapOldAcc.get(eachAcc.Id).Partner_Type_Status__c;
+                        eachAcc.Expiration_Date_Backend__c = mapOldAcc.get(eachAcc.Id).Expiration_Date__c;
+                        eachAcc.Exception_for_Active_Service_Backend__c = mapOldAcc.get(eachAcc.Id).Exception_ASC__c;
+                    }
+                    eachAcc.Deployment_Status__c = 'Guest User';
+                    eachACC.Partner_Type_Status__c = 'De-Registered';
+                    eachAcc.Exception_ASC__c = '';
+                    eachAcc.Expiration_Date__c = null;
+                } else if (mapOldAcc.get(eachAcc.Id).Restrict_Download_Access__c == true && eachAcc.Restrict_Download_Access__c == False) {
+                    eachAcc.Partner_Type_Status__c = eachAcc.Partner_Type_Status_Backend__c != Null ? eachAcc.Partner_Type_Status_Backend__c : '';
+                    eachAcc.Exception_ASC__c = eachAcc.Exception_for_Active_Service_Backend__c != null ? eachAcc.Exception_for_Active_Service_Backend__c : '';
+                    eachAcc.Expiration_Date__c = eachAcc.Expiration_Date_Backend__c != null ? eachAcc.Expiration_Date_Backend__c : null;
+                }
+            } else if (eachAcc.RecordTypeId != recordTypeId) {
+                if (eachAcc.Restrict_Download_Access__c == true) {
+                    System.Debug(eachAcc.Name + ' ' + eachAcc.Restrict_Download_Access__c);
+                    if (eachAcc.Exception_ASC__c != '' && eachAcc.Exception_ASC__c != mapOldAcc.get(eachAcc.Id).Exception_ASC__c && mapOldAcc.get(eachAcc.Id).Restrict_Download_Access__c == true && eachAcc.Restrict_Download_Access__c == true) {
+                        eachAcc.adderror('You can not set ASC% < 80 or modify "Exception for Active Service Contract%" as "Restrict Download Access" checkbox is checked');
+                    } else if (eachAcc.Exception_ASC__c != '' && mapOldAcc.get(eachAcc.Id).Restrict_Download_Access__c == False && eachAcc.Restrict_Download_Access__c == True) {
+                        eachAcc.Expiration_Date_Backend__c = mapOldAcc.get(eachAcc.Id).Expiration_Date__c;
+                        eachAcc.Exception_for_Active_Service_Backend__c = mapOldAcc.get(eachAcc.Id).Exception_ASC__c;
+                    }
+                    eachAcc.Deployment_Status__c = 'Guest User';
+                    eachAcc.Exception_ASC__c = '';
+                    eachAcc.Expiration_Date__c = null;
+                } else if (mapOldAcc.get(eachAcc.Id).Restrict_Download_Access__c == true && eachAcc.Restrict_Download_Access__c == False) {
+                    eachAcc.Exception_ASC__c = eachAcc.Exception_for_Active_Service_Backend__c != null ? eachAcc.Exception_for_Active_Service_Backend__c : '';
+                    eachAcc.Expiration_Date__c = eachAcc.Expiration_Date_Backend__c != null ? eachAcc.Expiration_Date_Backend__c : null;
+                }
+            }
+        }
+    }
+
+
+
+    // Sanchit: Work on Partial Restriction checkbox.
+    void partialRestrictionCondBeforeUpdate(List < Account > lstAcc, Map < Id, Account > mapOldAcc) {
+        system.debug('Function partialRestrictionCondBeforeUpdate is called.');
+        for (Account eachAcc: lstAcc) {
+            System.debug('Account name' + eachAcc.name);
+            // 8 June 2017: updated the logic below
+            if (mapOldAcc.get(eachAcc.Id).Active_Service_Contract__c < 80 && eachAcc.Active_Service_Contract__c >= 80) {
+                eachAcc.Partial_Restriction__c = false;
+                eachAcc.Comment__c = null;
+            } else if (mapOldAcc.get(eachAcc.Id).Active_Service_Contract__c >= 80 && (eachAcc.Active_Service_Contract__c == mapOldAcc.get(eachAcc.Id).Active_Service_Contract__c) && (mapOldAcc.get(eachAcc.Id).Partial_Restriction__c != eachAcc.Partial_Restriction__c)) {
+                eachAcc.Partial_Restriction__c.addError('Current functionality does not allow Partial Restriction if ASC >= 80%');
+            } else if (mapOldAcc.get(eachAcc.Id).Active_Service_Contract__c < 80 && (eachAcc.Active_Service_Contract__c == mapOldAcc.get(eachAcc.Id).Active_Service_Contract__c) && (mapOldAcc.get(eachAcc.Id).Partial_Restriction__c != eachAcc.Partial_Restriction__c)) {
+                if (eachAcc.Comment__c == null || eachAcc.Comment__c == '') {
+                    eachAcc.Comment__c.addError('Please provide the reason for Renewal of Service!');
+                } else if (eachAcc.Comment__c.equalsIgnoreCase(mapOldAcc.get(eachAcc.Id).Comment__c)) {
+                    eachAcc.Comment__c.addError('New comment cannot be same as the existing comment!');
+                }
+
+            }
+
+        }
+    }
+
+
+    void onUpdateBefore(List < Account > lstAcc, Map < Id, Account > mapOldAcc) {
+        //Akshay: added method to validate the Website field.
+        TriggerEnabled__c trigger_CustomSetting1 = TriggerEnabled__c.getInstance('AccountTriggerWebsiteChecker');
+        if (lstAcc != null && lstAcc.size() > 0) {
+            List < User > lstCurrentUser = [Select Id, Name, Edit_T_H_A_Account__c from User WHERE Id =: UserInfo.getUserId()];
+            for (Account eachAcc: lstAcc) {
+                if (trigger_CustomSetting1 != null && trigger_CustomSetting1.Active__c == true && !clsRecusrsiveCheck.bypassTrgAccount_ForExitsingAccount && !clsRecusrsiveCheck.byPassTrgAccount) {
+                    if (mapOldAcc != null && mapOldAcc.size() > 0 && mapOldAcc.get(eachAcc.Id).Website != null && (String.isEmpty(eachAcc.website) || String.isBlank(eachAcc.website))) {
+                        eachAcc.website.addError('Website can not be blank.');
+                    }
+                    if (mapOldAcc.get(eachAcc.Id).Website != eachAcc.website) {
+                        if (String.isNotEmpty(eachAcc.website) && String.isNotBlank(eachAcc.website) && !validateWebsite(eachAcc.website.trim())) {
+                            eachAcc.website.addError('Website is not correct. Please insert in correct format.');
+                        }
+                        if (String.isNotEmpty(eachAcc.website) && String.isNotBlank(eachAcc.website))
+                            eachAcc.website = eachAcc.website.trim().toLowercase();
+                    }
+                }
+                if (mapOldAcc.get(eachAcc.Id).NoDelete__c && eachAcc.Name != mapOldAcc.get(eachAcc.Id).Name)
+                    eachAcc.Name.addError('You can not change the name of Account. Please Contact to Admin.');
+                //Added by Anuj Sahu, to populate the name of user who modifies the exception active service percentage field,
+                //  when a existing record is updated.
+                if (eachAcc.Exception_ASC__c != mapOldAcc.get(eachAcc.Id).Exception_ASC__c)
+                    eachAcc.Exception_Modified_By__c = UserInfo.getUserId();
+
+                //Added by Akshay, checked a user that have permission to edit the T.H.A account or not.
+                // Said by Akshay, if the Account's name will have the combination of 'Arista NAM' and 'Region T.H.A', 
+                // then it will depend on the checkbox 'Edit T.H.A' field which is on user.
+                if (mapOldAcc.get(eachAcc.Id).Name.contains('Region T.H.A') && mapOldAcc.get(eachAcc.Id).Name.contains('Arista NAM') && lstCurrentUser[0].Edit_T_H_A_Account__c != true)
+                    eachAcc.addError('You do not have sufficient permission to edit this Account.');
+
+            }
+        }
+    }
+
+    // The API will call if there is any change in any one field from these 
+    //(Deployment_Status__c, Partner_Type_Status__c, Active_Service_Contract__c, Exception_ASC__c, Exception_Service_Percentage__c)
+    static void onUpdateAfter(List < Account > lstAcc, Map < Id, Account > mapOldAcc) {
+        if (lstAcc != null && lstAcc.size() > 0) {
+            // setAccId: Handle AccountAPICall class.
+            Set < Id > setAccId = new Set < Id > ();
+            // mapIdAccIdSEChange: Handle Account's Systems Engineer update
+            Map < Id, Id > mapIdAccIdSEChange = new Map < Id, Id > ();
+            Map < Id, Id > mapIdAccIdOldSE = new Map < Id, Id > ();
+            // mapIdAccIdOwnerChange: Handle Account's OwnerId on update
+            Map < Id, Id > mapIdAccIdOwnerChange = new Map < Id, Id > ();
+            // Common set of account id.
+            Set < Id > setIdAccForChange = new Set < Id > ();
+            // Akshay: set contains account whose system engineer is changed.
+            Set < Id > setSystemEngineerChangedId = new Set < Id > ();
+
+            for (Account eachAcc: lstAcc) {
+                // This field is commented by Mohit Sharma. REF: Akshay Kumar
+                //||(mapOldAcc.get(eachAcc.Id).Exception_Service_Percentage__c != eachAcc.Exception_Service_Percentage__c)
+
+                // The api call is heppened if one of these field will change.
+                if ((mapOldAcc.get(eachAcc.Id).Deployment_Status__c != eachAcc.Deployment_Status__c) ||
+                    (mapOldAcc.get(eachAcc.Id).Partner_Type_Status__c != eachAcc.Partner_Type_Status__c) ||
+                    (mapOldAcc.get(eachAcc.Id).Active_Service_Contract__c != eachAcc.Active_Service_Contract__c) ||
+                    (mapOldAcc.get(eachAcc.Id).Exception_ASC__c != eachAcc.Exception_ASC__c)
+                )
+                    setAccId.add(eachAcc.Id);
+
+                // Akshay: Runs this block when system engineer on account is changed. 
+                if ((eachAcc.Systems_Engineer__c != mapOldAcc.get(eachAcc.Id).Systems_Engineer__c) || (eachAcc.OwnerId != mapOldAcc.get(eachAcc.Id).OwnerId)) {
+                    setIdAccForChange.add(eachAcc.Id);
+                    mapIdAccIdOwnerChange.put(eachAcc.Id, eachAcc.OwnerId);
+                    System.debug('eachAcc.name = ' + eachAcc.Name);
+                    if (mapOldAcc.get(eachAcc.Id).Systems_Engineer__c != null)
+                        mapIdAccIdOldSE.put(eachAcc.Id, mapOldAcc.get(eachAcc.Id).Systems_Engineer__c);
+
+                    if (eachAcc.Systems_Engineer__c != null)
+                        mapIdAccIdSEChange.put(eachAcc.Id, eachAcc.Systems_Engineer__c);
+                }
+            }
+
+            // Calling the AccountAPICall class for intracting to the client's api.
+            if (setAccId != null && setAccId.size() > 0) // && !Test.isRunningTest())
+            {
+                AccountAPICall.APIMethod(setAccId);
+                System.debug('Response is: ' + AccountAPICall.data);
+            }
+
+            // Akshay: update Netsuite owner when account is changed.
+            if (setIdAccForChange != null && setIdAccForChange.size() > 0) {
+                Database.executeBatch(new Batch_NetSuiteUpdate(setIdAccForChange, mapIdAccIdOwnerChange, mapIdAccIdOldSE, mapIdAccIdSEChange));
+            }
+        }
+    }
+    ///<SUMMARY>
+    /// This method will throw an error when an Account's deletion, if "No Delete" Checkbox is true.
+    /// lstOldAcc: This list has Trigger.Old list value from trigger.
+    ///</SUMMARY>
+    void onDeleteBefore(List < Account > lstOldAcc) {
+        if (lstOldAcc != null && lstOldAcc.size() > 0) {
+            for (Account eachAcc: lstOldAcc) {
+                if (eachAcc.NoDelete__c)
+                    eachAcc.addError('You can not delete this account. Please Contact to Admin.');
+            }
+        }
+    }
+
+    // Gaurav update domain field from website
+    public void updateDomainName(List < Account > accList, Map < Id, Account > mapOld, Boolean isInsert, Boolean isUpdate) {
+        for (Account acc: accList) {
+            String oldDomain;
+            if (acc.website == 'www.com')
+                acc.website.addError('Please enter the correct website name like www.companyname.com');
+            else if (isInsert && String.isNotEmpty(acc.website) && String.isNotBlank(acc.website)) {
+                String strDomain;
+                strDomain = acc.website.replace('http://', '').replace('https://', '').replace('www.', '');
+                if (String.isNotEmpty(strDomain) && String.isNotBlank(strDomain) && (strDomain.contains('?') || strDomain.contains('/'))) {
+                    if ((strDomain.contains('?') && strDomain.contains('/')) && (strDomain.indexOf('/') < strDomain.indexOf('?')))
+                        strDomain = strDomain.substringBefore('/');
+                    else if ((strDomain.contains('?') && strDomain.contains('/')) && (strDomain.indexOf('?') < strDomain.indexOf('/')))
+                        strDomain = strDomain.substringBefore('?');
+                    else if (strDomain.contains('/'))
+                        strDomain = strDomain.substringBefore('/');
+                    else if (strDomain.contains('?'))
+                        strDomain = strDomain.substringBefore('?');
+                }
+                if (String.isNotBlank(strDomain) && String.isNotEmpty(strDomain))
+                    acc.Domain_Name__c = strDomain;
+            } else if (isUpdate && String.isNotEmpty(acc.website) && String.isNotBlank(acc.website)) {
+                String strDomain;
+
+                if (mapOld != null && mapOld.size() > 0 && mapOld.keySet().contains(acc.id) && mapOld.get(acc.id).Domain_Name__c != acc.Domain_Name__c) {
+                    System.debug('----Domain Name----->1' + acc.Domain_Name__c);
+                    String finalDomain;
+                    if (String.isEmpty(acc.Domain_Name__c) || String.isBlank(acc.Domain_Name__c)) {
+                        strDomain = acc.website.replace('http://', '').replace('https://', '').replace('www.', '');
+                        if (String.isNotEmpty(strDomain) && String.isNotBlank(strDomain) && (strDomain.contains('?') || strDomain.contains('/'))) {
+                            if ((strDomain.contains('?') && strDomain.contains('/')) && (strDomain.indexOf('/') < strDomain.indexOf('?')))
+                                strDomain = strDomain.substringBefore('/');
+                            else if ((strDomain.contains('?') && strDomain.contains('/')) && (strDomain.indexOf('?') < strDomain.indexOf('/')))
+                                strDomain = strDomain.substringBefore('?');
+                            else if (strDomain.contains('/'))
+                                strDomain = strDomain.substringBefore('/');
+                            else if (strDomain.contains('?'))
+                                strDomain = strDomain.substringBefore('?');
+                        }
+                        if (String.isNotBlank(strDomain) && String.isNotEmpty(strDomain))
+                            acc.Domain_Name__c = strDomain;
+                    } else {
+                        List < String > lstDomainName = new List < String > ();
+
+                        if (String.isNotBlank(acc.Domain_Name__c) && String.isNotEmpty(acc.Domain_Name__c))
+                            lstDomainName = acc.Domain_Name__c.split(',');
+
+                        if (lstDomainName != null && lstDomainName.size() > 0) {
+                            for (String eachDomain: lstDomainName) {
+                                if (String.isBlank(finalDomain) || String.isEmpty(finalDomain))
+                                    finalDomain = eachDomain;
+                                else if (String.isNotEmpty(finalDomain) && String.isNotBlank(finalDomain) && !finalDomain.containsIgnoreCase(eachDomain))
+                                    finalDomain = finalDomain + ',' + eachDomain;
+                            }
+                        }
+                        if (String.isNotEmpty(finalDomain) && String.isNotBlank(finalDomain)) {
+                            System.debug('--------final field value--->' + finalDomain);
+                            strDomain = acc.website.replace('http://', '').replace('https://', '').replace('www.', '');
+                            if (strDomain.contains('?') || strDomain.contains('/')) {
+                                if ((strDomain.contains('?') && strDomain.contains('/')) && (strDomain.indexOf('/') < strDomain.indexOf('?')))
+                                    strDomain = strDomain.substringBefore('/');
+                                else if ((strDomain.contains('?') && strDomain.contains('/')) && (strDomain.indexOf('?') < strDomain.indexOf('/')))
+                                    strDomain = strDomain.substringBefore('?');
+                                else if (strDomain.contains('/'))
+                                    strDomain = strDomain.substringBefore('/');
+                                else if (strDomain.contains('?'))
+                                    strDomain = strDomain.substringBefore('?');
+                            }
+                            if (String.isNotEmpty(strDomain) && String.isNotBlank(strDomain) && !finalDomain.containsIgnoreCase(strDomain))
+                                acc.Domain_Name__c = strDomain + ',' + finalDomain;
+                            else
+                                acc.Domain_Name__c = finalDomain;
+                        }
+                    }
+                }
+                if (mapOld != null && mapOld.size() > 0 && mapOld.containsKey(acc.id) && mapOld.get(acc.id).website != acc.website) {
+                    System.debug('----Domain Name----->1' + acc.Domain_Name__c);
+                    String finalDomain;
+                    strDomain = acc.website.replace('http://', '').replace('https://', '').replace('www.', '');
+                    oldDomain = String.isNotEmpty(mapOld.get(acc.id).website) && String.isNotBlank(mapOld.get(acc.id).website) ? mapOld.get(acc.id).website.replace('http://', '').replace('https://', '').replace('www.', '') : null;
+                    if (strDomain.contains('?') || strDomain.contains('/')) {
+                        if ((strDomain.contains('?') && strDomain.contains('/')) && (strDomain.indexOf('/') < strDomain.indexOf('?')))
+                            strDomain = strDomain.substringBefore('/');
+                        else if ((strDomain.contains('?') && strDomain.contains('/')) && (strDomain.indexOf('?') < strDomain.indexOf('/')))
+                            strDomain = strDomain.substringBefore('?');
+                        else if (strDomain.contains('/'))
+                            strDomain = strDomain.substringBefore('/');
+                        else if (strDomain.contains('?'))
+                            strDomain = strDomain.substringBefore('?');
+                    }
+                    if (String.isNotEmpty(oldDomain) && String.isNotBlank(oldDomain) && (oldDomain.contains('?') || oldDomain.contains('/'))) {
+                        if ((oldDomain.contains('?') && oldDomain.contains('/')) && (oldDomain.indexOf('/') < oldDomain.indexOf('?')))
+                            oldDomain = oldDomain.substringBefore('/');
+                        else if ((oldDomain.contains('?') && oldDomain.contains('/')) && (oldDomain.indexOf('?') < oldDomain.indexOf('/')))
+                            oldDomain = oldDomain.substringBefore('?');
+                        else if (oldDomain.contains('/'))
+                            oldDomain = oldDomain.substringBefore('/');
+                        else if (oldDomain.contains('?'))
+                            oldDomain = oldDomain.substringBefore('?');
+                    }
+                    System.debug('-----strDomain-->' + strDomain);
+                    System.debug('-----oldDomain-->' + oldDomain);
+                    if (String.isNotBlank(strDomain) && String.isNotEmpty(strDomain)) {
+                        if (String.isNotBlank(oldDomain) && String.isNotEmpty(oldDomain)) {
+                            List < String > lstDomainName = new List < String > ();
+                            if (String.isNotEmpty(acc.Domain_Name__c) && String.isNotBlank(acc.Domain_Name__c))
+                                lstDomainName = acc.Domain_Name__c.split(',');
+
+                            System.debug('-----lstDomainName-->' + lstDomainName);
+                            System.debug('-----finalDomain--1-->' + finalDomain);
+                            if (lstDomainName != null && lstDomainName.size() > 0) {
+                                for (String eachDomain: lstDomainName) {
+                                    System.debug('each domain name----->' + eachDomain);
+                                    if (String.isEmpty(finalDomain) || String.isEmpty(finalDomain)) {
+                                        if (eachDomain.equalsIgnorecase(oldDomain))
+                                            finalDomain = strDomain;
+                                        else {
+                                            finalDomain = strDomain;
+                                            finalDomain = String.isNotEmpty(finalDomain) && String.isNotBlank(finalDomain) && !finalDomain.containsIgnoreCase(eachDomain) ? finalDomain + ',' + eachDomain : finalDomain;
+                                        }
+
+                                    } else if (!finalDomain.containsIgnoreCase(eachDomain)) {
+                                        if (eachDomain.equalsIgnorecase(oldDomain))
+                                            finalDomain = !finalDomain.containsIgnoreCase(strDomain) ? finalDomain + ',' + strDomain : finalDomain;
+                                        else
+                                            finalDomain = !finalDomain.containsIgnoreCase(eachDomain) ? finalDomain + ',' + eachDomain : finalDomain;
+                                    }
+                                }
+                                System.debug('-----finalDomain--1-->' + finalDomain);
+                                if (String.isNotEmpty(finalDomain) && String.isNotBlank(finalDomain))
+                                    acc.Domain_Name__c = finalDomain;
+                            }
+                        } else
+                            acc.Domain_Name__c = strDomain;
+                    }
+                }
+            }
+        }
+    }
+
+    // Akshay: validate Website field.
+    public boolean validateWebsite(String strWebsiteName) {
+        strWebsiteName = strWebsiteName.toLowerCase();
+
+        if (strWebsiteName.startsWithIgnoreCase('https://www.') || strWebsiteName.startsWithIgnoreCase('http://www.')) {
+            String repWebsite = strWebsiteName.replace('.', '@');
+            String splitWebsite = repWebsite.split('@')[0];
+            Boolean isValid1 = String.isNotBlank(splitWebsite) && String.isNotEmpty(splitWebsite) && (splitWebsite.equalsIgnorecase('http://www') || splitWebsite.equalsIgnorecase('https://www')) ? true : false;
+            if (!strWebsiteName.contains('..') && isValid1) {
+                //String regex = '^((http|https)://)??(www[.])??([a-zA-Z0-9]|-)+?([.][a-zA-Z0-9(-|/|=|?)??]+?)+?$';
+                String regex = '(https?://(?:www\\.|(?!www))[a-zA-Z0-9-]+[a-zA-Z0-9]\\.[^\\s]{1,}|www\\.[a-zA-Z0-9-]+[a-zA-Z0-9]\\.[^\\s]{1,}|https?:\\/\\/(?:www\\.|(?!www))[a-zA-Z0-9]\\.[^\\s]{1,}|www\\.[a-zA-Z0-9]\\.[^\\s]{1,})';
+                Pattern websitePat = Pattern.compile(regex);
+                Matcher mtch = websitePat.matcher(strWebsiteName);
+                If(mtch.matches())
+                return true;
+                else
+                    return false;
+            } else
+                return false;
+
+        } //(str.subStringAfter('https://')).startsWithIgnorecase('www'))
+        else if ((strWebsiteName.startsWithIgnoreCase('http://') || strWebsiteName.startsWithIgnoreCase('https://'))) {
+            String websiteSubStr;
+            boolean IsWebSiteCorrctName = true;
+            if (strWebsiteName.startsWithIgnoreCase('https://'))
+                websiteSubStr = strWebsiteName.subStringAfter('https://');
+            else if (strWebsiteName.startsWithIgnoreCase('http://'))
+                websiteSubStr = strWebsiteName.subStringAfter('http://');
+            else
+                websiteSubStr = null;
+
+            System.debug('----------websiteSubStr' + websiteSubStr);
+            if (String.isNotEmpty(websiteSubStr) & String.isNotBlank(websiteSubStr) && websiteSubStr.startsWithIgnorecase('www.'))
+                IsWebSiteCorrctName = true;
+            else {
+                if (websiteSubStr.startsWithIgnorecase('w.') || websiteSubStr.startsWithIgnorecase('ww.'))
+                    IsWebSiteCorrctName = false;
+                else
+                    IsWebSiteCorrctName = true;
+            }
+
+            System.debug('with http:--->' + IsWebSiteCorrctName);
+            System.debug('-------' + strWebsiteName);
+            if (!strWebsiteName.contains('..') && IsWebSiteCorrctName) {
+                //String regex = '^((http|https)://)??(www[.])??([a-zA-Z0-9]|-)+?([.][a-zA-Z0-9(-|/|=|?)??]+?)+?$';
+                String regex = '(https?://(?:www\\.|(?!www))[a-zA-Z0-9-]+[a-zA-Z0-9]\\.[^\\s]{1,}|www\\.[a-zA-Z0-9-]+[a-zA-Z0-9]\\.[^\\s]{1,}|https?:\\/\\/(?:www\\.|(?!www))[a-zA-Z0-9]\\.[^\\s]{1,}|www\\.[a-zA-Z0-9]\\.[^\\s]{1,})';
+                Pattern websitePat = Pattern.compile(regex);
+                Matcher mtch = websitePat.matcher(strWebsiteName);
+                If(mtch.matches())
+                return true;
+                else
+                    return false;
+            } else
+                return false;
+        } else if (strWebsiteName.startsWithIgnoreCase('www.') && !strWebsiteName.containsIgnoreCase('http')) {
+            if (!strWebsiteName.contains('..')) {
+                //String regex = '^((http|https)://)??(www[.])??([a-zA-Z0-9]|-)+?([.][a-zA-Z0-9(-|/|=|?)??]+?)+?$';
+                String regex = '(https?://(?:www\\.|(?!www))[a-zA-Z0-9-]+[a-zA-Z0-9]\\.[^\\s]{1,}|www\\.[a-zA-Z0-9-]+[a-zA-Z0-9]\\.[^\\s]{1,}|https?:\\/\\/(?:www\\.|(?!www))[a-zA-Z0-9]\\.[^\\s]{1,}|www\\.[a-zA-Z0-9]\\.[^\\s]{1,})';
+                Pattern websitePat = Pattern.compile(regex);
+                Matcher mtch = websitePat.matcher(strWebsiteName);
+                If(mtch.matches())
+                return true;
+                else
+                    return false;
+            } else
+                return false;
+        } else
+            return false;
+    }
+
+    //-----------------------------------------------11/4/2018 :Neha:  Add user in Account Team------------------------------------------
+    ///<SUMMARY>
+    ///DESC: About function 
+    /// manageTeamMember: This method add user in AcoountTeam automatically if user is added in metadata(Add_Account_Team_Member__mdt)
+    /// About Parameters
+    ///lstNewAcc: This is trigger.new list.
+    ///isUpdate: This is boolean Trigger.Isupdate
+    ///</SUMMARY> 
+    public void manageTeamMember(List < Account > lstNewAcc, Map < Id, Account > oldMapAcc, Map < Id, Account > newMapAcc, Boolean isUpdate) {
+        // Fetch Existing Account Team Members list      
+        List < AccountTeamMember > existingAccountTeam = [select UserId, TeamMemberRole, AccountId from AccountTeamMember where AccountId IN: newMapAcc.keySet()];
+        system.debug('existingAccountTeam' + existingAccountTeam);
+
+        Set < String > existingAccTeamSet = new set < String > ();
+        if (existingAccountTeam != null && existingAccountTeam.size() > 0) {
+            for (AccountTeamMember eachmember: existingAccountTeam) {
+                String accId = String.valueOf(eachmember.AccountId).substring(0, 15);
+                String userId = String.valueOf(eachmember.UserId).substring(0, 15);
+                String existingAccUser = accId + '-' + userId;
+                existingAccTeamSet.add(existingAccUser);
+            }
+        }
+        system.debug('existingAccTeamSet' + existingAccTeamSet);
+
+        //Access Metadata
+        List < Add_Account_Team_Member__mdt > lstMetaData = [Select User_ID__c, CountryCode__c, State__c, UserRole__c from Add_Account_Team_Member__mdt];
+        system.debug('#===== lstMetaData: ' + lstMetaData);
+
+        Map < String, List < Add_Account_Team_Member__mdt >> mdtMembersMap = new Map < String, List < Add_Account_Team_Member__mdt >> ();
+        if (lstMetaData != null && lstMetaData.size() > 0) {
+            for (Add_Account_Team_Member__mdt eachmember: lstMetaData) {
+                String key = eachmember.CountryCode__c.toUpperCase() + '-' + eachmember.State__c.toUpperCase();
+                if (!mdtMembersMap.containsKey(key))
+                    mdtMembersMap.put(key, new List < Add_Account_Team_Member__mdt > {
+                        eachmember
+                    });
+                else
+                    mdtMembersMap.get(key).add(eachmember);
+            }
+        }
+        system.debug('mdtMembersMap' + mdtMembersMap);
+
+        if (lstNewAcc.size() > 0 && lstNewAcc != null) {
+            List < AccountTeamMember > lstAccTeamMem = new List < AccountTeamMember > ();
+            List < AccountShare > lstAccShare = new List < AccountShare > ();
+
+            for (Account eachAcc: lstNewAcc) {
+                if (eachAcc.BillingCountryCode != null && eachAcc.BillingCountryCode != '' && eachAcc.BillingState != null && eachAcc.BillingState != '') {
+                    String accountId = String.valueOf(eachAcc.Id).substring(0, 15);
+                    String compareMapKey = eachAcc.BillingCountryCode.toUpperCase() + '-' + eachAcc.BillingState.toUpperCase();
+                    system.debug('compareMapKey' + compareMapKey);
+                    if (compareMapKey != null && compareMapKey.length() > 0 && mdtMembersMap.containsKey(compareMapKey)) {
+                        for (Add_Account_Team_Member__mdt eachmember: mdtMembersMap.get(compareMapKey)) {
+                            if (!existingAccTeamSet.contains(eachAcc.id + '-' + eachmember.User_ID__c) && eachmember.User_ID__c != eachAcc.ownerid) {
+                                lstAccTeamMem.add(createTeamMember(accountId, eachmember.User_ID__c, eachmember.UserRole__c));
+                                lstAccShare.add(shareAcc(accountId, eachmember.User_ID__c));
+                            }
+                        }
+                    }
+                }
+            }
+
+            system.debug('lstAccShare-------' + lstAccShare);
+            system.debug('lstAccTeamMem-------' + lstAccTeamMem);
+
+            if (lstAccTeamMem != null && lstAccTeamMem.size() > 0 && lstAccShare != null && lstAccShare.size() > 0) {
+                try {
+                    insert lstAccTeamMem;
+                    insert lstAccShare;
+                } catch (Exception e) {
+                    system.debug('Exception-------' + e);
+                }
+            }
+        }
+    }
+
+    AccountTeamMember createTeamMember(String accountId, String Uid, String role) {
+        AccountTeamMember objTeamMember = new AccountTeamMember();
+        objTeamMember.AccountId = accountId;
+        objTeamMember.UserId = Uid;
+        objTeamMember.TeamMemberRole = role;
+        return objTeamMember;
+    }
+
+    AccountShare shareAcc(String accountId, String Uid) {
+        AccountShare accountShare = new AccountShare();
+        accountShare.AccountId = accountId;
+        accountShare.UserOrGroupId = Uid;
+        accountShare.AccountAccessLevel = 'Edit';
+        accountShare.CaseAccessLevel = 'Edit';
+        accountShare.OpportunityAccessLevel = 'Edit';
+        return accountShare;
+    }
+    //------------------------End : Add user in Account Team Code ------------------------------------------------------------------------------------
+
+
+    /*
+Added By Boddh (Kloudrac.com)
+Description: Based on Account Global Access, Update Contacts' fields
+History:
+Radhe S    Sep 4 2018    Desc: Update only those contacts where Customer Portal Profile is 'Standard User'; Ref: CP Phase III
+
+*/
+    public static Boolean isFromAcc = false; // For pass to contact when update customer portal editable access.
+    public static void portalGlobalAccess(list < Account > lstNewAccount, Map < Id, Account > mapOldAccount, boolean isAfter, boolean isUpdate, boolean isinsert) {
+        Map < Id, Account > updAddAccs = new Map < Id, Account > ();
+        Map < Id, Account > updRemoveAccs = new Map < Id, Account > ();
+
+        for (account each: lstNewAccount) {
+
+            if (mapOldAccount != null && mapOldAccount.get(each.Id).global_Access__c != each.global_Access__c) {
+                if (each.global_Access__c == true && mapOldAccount.get(each.Id).global_Access__c == false)
+                    updAddAccs.put(each.id, each);
+                if (each.global_Access__c == false && mapOldAccount.get(each.Id).global_Access__c == true)
+                    updRemoveAccs.put(each.id, each);
+            }
+        }
+
+        List < Contact > lstCon = new List < Contact > ();
+
+        if (updAddAccs != null && updAddAccs.size() > 0) {
+            List < Contact > updCon = [select id, All_Cases__c, Parent_Child_Cases__c from contact
+                where accountId in: updAddAccs.keySet()
+            ];
+
+            for (Contact con: updCon) {
+                Contact c = new Contact(id = con.id);
+                if (con.All_Cases__c == false)
+                    c.All_Cases__c = true;
+                if (con.Parent_Child_Cases__c == false)
+                    c.Parent_Child_Cases__c = true;
+                lstCon.add(c);
+            }
+
+
+            System.debug('RS  = Setting TRUE ' + lstCon);
+
+        }
+        if (updRemoveAccs != null && updRemoveAccs.size() > 0) {
+            List < Contact > updCon = [select id, Request_Status__c, Customer_Portal_Profile_Access__c, All_Cases__c, Parent_Child_Cases__c from contact where accountId in: updRemoveAccs.keySet()];
+            for (Contact con: updCon) {
+                Contact c = new Contact(id = con.id);
+                if (con.Customer_Portal_Profile_Access__c != 'Admin User' && con.Request_Status__c != 'Approved') {
+                    c.All_Cases__c = false;
+                    c.Parent_Child_Cases__c = false;
+                }
+                lstCon.add(c);
+                System.debug('RS  = Setting FALSE ' + lstCon);
+
+            }
+
+        }
+
+        if (lstCon != null && lstCon.size() > 0) {
+            System.debug('RS: lstCon ' + lstCon);
+            isFromAcc = true;
+            cls_StaticFlagVariable.flagForEditableAccess = false;
+            update lstCon;
+            isFromAcc = false;
+        }
+
+
+    }
+
+    @Future(CallOut = true)
+    public static void websiteAPICall(Id accountID, string Strwebsite) {
+        system.debug('accountID---------------:>' + accountID);
+        system.debug('Strwebsite--------------:>' + Strwebsite);
+        clsWEBSiteCheckerCallout.WebSiteChecker(accountID, Strwebsite);
+    }
+
+    public static void getAccountData(list < Account > lstNewAccount, Map < Id, Account > mapOldAccount, boolean isAfter, boolean isUpdate, boolean isinsert) {
+        System.debug('mapOldAccount ' + mapOldAccount);
+        if (lstNewAccount != null && lstNewAccount.size() > 0 && mapOldAccount != null && mapOldAccount.size() > 0) {
+            for (account eachNew: lstNewAccount) {
+                try {
+                    system.debug('Test trgHandler');
+                    if (eachNew.website != mapOldAccount.get(eachNew.Id).website && IsUpdate)
+                        websiteAPICall(eachNew.id, eachNew.website);
+                    else {
+                        if (eachNew.website != null && isInsert)
+                            websiteAPICall(eachNew.id, eachNew.website);
+                    }
+                    System.debug('@webAccount');
+                } catch (exception ex) {
+                    system.debug('Exception ------>' + ex);
+                }
+            }
+        }
+    }
+
+    ///===================================================== START 04-June-2018 =====================================================    
+    ///<SUMMARY>
+    ///DESC.: We are sharing Case, RMA, RMA Line Item and Install Base records with parent or same Account's portal users 
+    ///EVENTS: after update/ No need to check for insert because new Account child or parent never have a child record.
+    ///</SUMMARY>
+    public static void handleApexRecordSharing(List < Account > lstTriggerNew, Map < Id, Account > mapTriggerOld) {
+    
+        if (lstTriggerNew != null && lstTriggerNew.size() > 0) {
+            Set < Id > setIdAcc = new Set < Id > ();
+            Map < Id, List < Id >> mapIdParentListIdChildAcc = new Map < Id, List < Id >> ();
+            Map < Id, List < Id >> mapIdParentListIdChildAcc_Del = new Map < Id, List < Id >> ();
+            Set < id > setUserId = new Set < id > ();
+
+            for (Account eachAcc: lstTriggerNew) {
+                if (eachAcc.ParentId != mapTriggerOld.get(eachAcc.Id).ParentId) {
+                    if (eachAcc.ParentId != null) {
+                        setIdAcc.add(eachAcc.ParentId);
+
+                        if (!mapIdParentListIdChildAcc.containsKey(eachAcc.ParentId))
+                            mapIdParentListIdChildAcc.put(eachAcc.ParentId, new List < Id > {
+                                eachAcc.Id
+                            });
+                        else
+                            mapIdParentListIdChildAcc.get(eachAcc.ParentId).add(eachAcc.Id);
+                    }
+
+                    if (mapTriggerOld.get(eachAcc.Id).ParentId != null) {
+                        setIdAcc.add(mapTriggerOld.get(eachAcc.Id).ParentId);
+
+                        if (!mapIdParentListIdChildAcc_Del.containsKey(mapTriggerOld.get(eachAcc.Id).ParentId))
+                            mapIdParentListIdChildAcc_Del.put(mapTriggerOld.get(eachAcc.Id).ParentId, new List < Id > {
+                                eachAcc.Id
+                            });
+                        else
+                            mapIdParentListIdChildAcc_Del.get(mapTriggerOld.get(eachAcc.Id).ParentId).add(eachAcc.Id);
+                    }
+                }
+            }
+
+            System.debug('mapIdParentListIdChildAcc ' + json.serialize(mapIdParentListIdChildAcc));
+            System.debug('setIdAcc ' + json.serialize(setIdAcc));
+            System.debug('mapIdParentListIdChildAcc_Del ' + json.serialize(mapIdParentListIdChildAcc_Del));
+            //System.debug('mapIdParentListIdChildAcc '+json.serialize(mapIdParentListIdChildAcc));
+
+
+
+            if (setIdAcc != null && setIdAcc.size() > 0) {
+                String strPortalUserQuery = 'Select Id, AccountId, ContactId, Contact.Parent_Child_Cases__c, ' +
+                    'Contact.Parent_Child_Install_Base_Access__c from User ' +
+                    'Where IsActive = true AND AccountId IN :setIdAcc';
+
+                //+ 'AND (Contact.Parent_Child_Cases__c = true OR Contact.Parent_Child_Install_Base_Access__c = true) '
+                //+ 'AND AccountId IN :setIdAcc';
+                System.debug('---- strPortalUserQuery: ' + strPortalUserQuery);
+
+                List < User > lstPortalUser = Database.query(strPortalUserQuery);
+                System.debug('---- lstPortalUser: ' + json.serialize(lstPortalUser));
+
+                if (lstPortalUser != null && lstPortalUser.size() > 0) {
+                    Map < Id, List < Id >> mapIdAccListIdUser = new Map < Id, List < Id >> ();
+                    Map < Id, List < Id >> mapIdAccListUserId_Case = new Map < Id, List < Id >> ();
+
+                    Set < Id > setIdUser = new Set < Id > ();
+                    Set < Id > setIdOldAcc = new Set < Id > ();
+
+                    Set < Id > setIdUser_Del = new Set < Id > ();
+                    Set < Id > setIdOldAcc_Del = new Set < Id > ();
+
+                    for (User eachUser: lstPortalUser) {
+                        if (mapIdParentListIdChildAcc.containsKey(eachUser.AccountId)) {
+                            for (Id eachAccId: mapIdParentListIdChildAcc.get(eachUser.accountId)) {
+                                if (eachUser.Contact.Parent_Child_Cases__c) {
+                                    if (!mapIdAccListUserId_Case.containsKey(eachAccId))
+                                        mapIdAccListUserId_Case.put(eachAccId, new List < Id > {
+                                            eachUser.Id
+                                        });
+                                    else
+                                        mapIdAccListUserId_Case.get(eachAccId).add(eachUser.Id);
+
+                                    setUserId.add(eachUser.Id);
+                                }
+
+                                if (eachUser.Contact.Parent_Child_Install_Base_Access__c) {
+                                    if (!mapIdAccListIdUser.containsKey(eachAccId))
+                                        mapIdAccListIdUser.put(eachAccId, new List < Id > {
+                                            eachUser.Id
+                                        });
+                                    else
+                                        mapIdAccListIdUser.get(eachAccId).add(eachUser.Id);
+                                }
+                            }
+                        }
+
+                        if (mapIdParentListIdChildAcc_Del.containsKey(eachUser.AccountId)) {
+                            for (Id eachAccId: mapIdParentListIdChildAcc_Del.get(eachUser.accountId)) {
+                                setIdUser.add(eachUser.Id);
+                                setIdOldAcc.add(eachAccId);
+                            }
+                        }
+                    }
+
+                    System.debug('setIdUser ' + json.serialize(setIdUser));
+                    System.debug('setIdOldAcc ' + json.serialize(setIdOldAcc));
+
+
+
+                    //================================================ Start Case Sharing ================================================
+                    //Deleting the sharing of Case and Install Base information
+                    System.debug('---- setIdUser: ' + setIdUser);
+                    System.debug('---- setIdOldAcc: ' + setIdOldAcc);
+                    if (setIdUser != null && setIdUser.size() > 0 && setIdOldAcc != null && setIdOldAcc.size() > 0) {
+                        //To Delete Case Sharing
+                        BatchCaseSharing objBatchCaseSharing = new BatchCaseSharing();
+                        objBatchCaseSharing.queryForSharing(null, setIdOldAcc, setIdUser, false, false, null, null,
+                            'trgAccountHandler - sharingCase_InstallBase: for Deletion of Case Share', null, null, null, null);
+
+                        String jobId = Database.executeBatch(objBatchCaseSharing, 100);
+                        System.debug('--- jobId: ' + jobId);
+                    }
+
+                    //Performing Insertion on Case records
+                    if (mapIdAccListUserId_Case != null && mapIdAccListUserId_Case.size() > 0) {
+                        BatchCaseSharing objBatchCaseSharing = new BatchCaseSharing();
+                        objBatchCaseSharing.queryForSharing(mapIdAccListUserId_Case, null, null, true, false, null, null,
+                            'trgAccountHandler - sharingCase_InstallBase: for Insetion of Case Share', null, null, null, null);
+
+                        String jobId = Database.executeBatch(objBatchCaseSharing, 100);
+                        System.debug('--- jobId: ' + jobId);
+                    }
+                    //================================================ End of Case Sharing ================================================
+                    //================================================ Start Install Base Sharing =========================================
+                    System.debug('---- setIdUser: ' + setIdUser);
+                    System.debug('---- setIdOldAcc: ' + setIdOldAcc);
+                    //Perform Deletion for Install Base information
+                    if (setIdUser != null && setIdUser.size() > 0 && setIdOldAcc != null && setIdOldAcc.size() > 0) {
+                        String strInstallBaseQuery = 'Select Id, Customer_Name__c, (Select Id, RowCause, ParentId, UserOrGroupId from Shares ' +
+                            'Where RowCause != \'ImplicitChild\' AND UserOrGroupId IN :setIdUser) ' +
+                            'from NetSuite_NS_Switch_Information__c ' +
+                            'Where Customer_Name__c != null ' +
+                            'AND Customer_Name__c IN :setIdOldAcc ' +
+                            'AND Id IN (Select ParentId from NetSuite_NS_Switch_Information__share ' +
+                            'Where UserOrGroupId IN :setIdUser AND RowCause != \'ImplicitChild\') ';
+
+                        System.debug('---- strInstallBaseQuery: ' + strInstallBaseQuery);
+
+                        Batch_ForInstallBase_RMA objBatch = new Batch_ForInstallBase_RMA(strInstallBaseQuery, null, null, setIdOldAcc, setIdUser,
+                            true, null, 'trgAccountHandler - sharingCase_InstallBase: for Deletion of Install Base Share');
+                        String jobId = Database.executeBatch(objBatch, 100);
+                        System.debug('--- jobId: ' + jobId);
+                    }
+
+                    //Perform Insetion for Install Base information
+                    if (mapIdAccListIdUser != null && mapIdAccListIdUser.size() > 0) {
+                        Set < Id > setIdAccount = mapIdAccListIdUser.keySet();
+                        System.debug('---- setIdAccount: ' + setIdAccount);
+
+                        if (setIdAccount != null && setIdAccount.size() > 0) {
+                            String strInstallBaseQuery = 'Select Id, Customer_Name__c from NetSuite_NS_Switch_Information__c ' +
+                                'Where Customer_Name__c != null AND Customer_Name__c IN :setIdAccount';
+
+                            System.debug('---- strInstallBaseQuery: ' + strInstallBaseQuery);
+
+                            Batch_ForInstallBase_RMA objBatch = new Batch_ForInstallBase_RMA(strInstallBaseQuery, mapIdAccListIdUser, setIdAccount,
+                                null, null, false, null, 'trgAccountHandler - sharingCase_InstallBase: for Insetion of Install Base Share');
+                            String jobId = Database.executeBatch(objBatch, 100);
+                            System.debug('--- jobId: ' + jobId);
+                        }
+                    }
+                    //================================================ End of Install Base Sharing ================================================
+
+                    //RMA and Line Deletion
+                    if ((setIdOldAcc != null && setIdOldAcc.size() > 0) && (setIdUser != null && setIdUser.size() > 0)) { //Start RMA Del
+
+                        // Start : Delete Sharing for RMA and RMA Line Items  
+                        System.debug('****** START :  RMA SHARING DELETION ***** ');
+                        System.debug('RS: setIdOldAcc ' + setIdOldAcc);
+                        System.debug('setIdUser ' + setIdUser);
+                        String strRMAQuery = 'Select Id, Account_Name__c, (Select Id, RowCause, ParentId, UserOrGroupId from Shares Where RowCause != \'ImplicitChild\' AND UserOrGroupId IN :setIdUser)  from RMADetail__c where ';
+                        if (setIdUser != null && setIdUser.size() > 0)
+                            strRMAQuery += ' Id IN (Select ParentId from RMADetail__share Where UserOrGroupId IN :setIdUser AND RowCause != \'ImplicitChild\') ';
+                        if (setIdOldAcc != null && setIdOldAcc.size() > 0)
+                            strRMAQuery += ' AND Account_Name__c IN :setIdOldAcc';
+
+                        System.debug(' strRMAQuery ' + strRMAQuery);
+
+                        String strRMALineItemQuery = 'Select Id, RMANo__c, RMANo__r.Account_Name__c, (Select Id, RowCause, ParentId, UserOrGroupId from Shares Where RowCause != \'ImplicitChild\' AND UserOrGroupId IN :setIdUser) from RMA_Detail__c where ';
+                        if (setIdUser != null && setIdUser.size() > 0)
+                            strRMALineItemQuery += ' Id IN (Select ParentId from RMA_Detail__share Where UserOrGroupId IN :setIdUser AND RowCause != \'ImplicitChild\') ';
+                        if (setIdOldAcc != null && setIdOldAcc.size() > 0)
+                            strRMALineItemQuery += ' AND RMANo__r.Account_Name__c IN :setIdOldAcc';
+
+                        System.debug(' strRMALineItemQuery ' + strRMALineItemQuery);
+                        //To Delete RMA Share Sharing
+                        if (strRMAQuery != null && strRMAQuery != '') {
+                            Batch_ForInstallBase_RMA objBatch = new Batch_ForInstallBase_RMA(strRMAQuery, null, null, setIdOldAcc, setIdUser, true,
+                                null, 'RMA :  From Account Trigger handler : On Parent Account Change.');
+                            String strlimit = Label.Admin_Access_delete_RMA_sharing_limit;
+                            if (strlimit != null && strlimit != '') {
+                                Integer intimit = Integer.valueOf(strlimit);
+                                String jobId = Database.executeBatch(objBatch, intimit);
+                                System.debug('--- jobId RMA: ' + jobId);
+                                System.debug('--- intimit ===== ' + intimit);
+                            }
+                            //String jobId = Database.executeBatch(objBatch, 100);
+                            //System.debug('--- jobId RMA: ' + jobId);
+                        }
+
+                        if (strRMALineItemQuery != null && strRMALineItemQuery != '') {
+                            Batch_ForInstallBase_RMA objBatch = new Batch_ForInstallBase_RMA(strRMALineItemQuery, null, null, setIdOldAcc, setIdUser, true,
+                                null, 'cls_InactivePortalUser - shareRecords: for deletion of RMA Line Item Share on Contact Object');
+                            String strlimit = Label.Admin_Access_delete_RMA_sharing_limit;
+                            if (strlimit != null && strlimit != '') {
+                                Integer intimit = Integer.valueOf(strlimit);
+                                String jobId = Database.executeBatch(objBatch, intimit);
+                                System.debug('--- jobId: RMA line' + jobId);
+                                System.debug('--- intimit ===== ' + intimit);
+                            }
+                            //String jobId = Database.executeBatch(objBatch, 100);
+                            //System.debug('--- jobId: RMA line' + jobId);
+                        }
+
+                    } //End Rma Delete
+
+                    //Insert RMA and RMA Sharing for 
+
+                    //Start RMA Insertion
+                    System.debug('mapIdAccListUserId_Case : ' + json.serialize(mapIdAccListUserId_Case));
+                    //System.debug('isRMAandCaseShare : ' + isRMAandCaseShare);
+                    if ((mapIdAccListUserId_Case != null && mapIdAccListUserId_Case.size() > 0)) {
+                        System.debug('Start--  RMA SHARING Insert ');
+                        System.debug('------------In RMA Sharing Insert----------');
+                        Set < Id > setIdAccount = mapIdAccListUserId_Case.keySet();
+
+                        System.debug('RS : mapIdAccListUserId_Case.keySet(); ' + mapIdAccListUserId_Case.keySet());
+                        System.debug('setIdAccount : ' + setIdAccount);
+                        String strRMAQuery, strRMALineItemQuery;
+                        if (setIdAccount != null && setIdAccount.size() > 0) {
+                            strRMAQuery = 'Select Id, Account_Name__c from RMADetail__c Where Account_Name__c != null AND Account_Name__c IN :setIdAccount';
+                            strRMALineItemQuery = 'Select Id, RMANo__c, RMANo__r.Account_Name__c from RMA_Detail__c Where RMANo__r.Account_Name__c != null AND RMANo__r.Account_Name__c IN :setIdAccount';
+
+                            System.debug('strRMAQuery 1' + strRMAQuery);
+                            System.debug('strRMALineItemQuery 1' + strRMALineItemQuery);
+                        }
+
+                        if (strRMAQuery != null && strRMAQuery != '') {
+                            System.debug('strRMAQuery 2' + strRMAQuery);
+                            Batch_ForInstallBase_RMA objBatch = new Batch_ForInstallBase_RMA(strRMAQuery, mapIdAccListUserId_Case, setIdAccount, null, null, false,
+                                null, 'RMA Sharing Insert : From Account Trigger Handler');
+                            String jobId = Database.executeBatch(objBatch);
+                            System.debug('--- jobId: ' + jobId);
+                        }
+
+                        if (strRMALineItemQuery != null && strRMALineItemQuery != '' && mapIdAccListUserId_Case != null & mapIdAccListUserId_Case.size() > 0) {
+                            System.debug('strRMALineItemQuery 2' + strRMALineItemQuery);
+                            Batch_ForInstallBase_RMA objBatch = new Batch_ForInstallBase_RMA(strRMALineItemQuery, mapIdAccListUserId_Case, setIdAccount, null, null, false,
+                                null, 'RMA Lines Sharing Insert : From Account Trigger Handler');
+                            String jobId = Database.executeBatch(objBatch, 100);
+                            System.debug('--- jobId: ' + jobId);
+                        }
+                    } //End RMA Insertion
+                } //End List Check
+            } //End setAccId Check
+
+        }
+    
+    }
+
+    public static Boolean recurdivecheck = true;
+    // Add By Nitish Bhardwaj 24 oct 2017
+    // This method is use to send email when Account is inActive 
+    // mail is send to Account owner and other user put in custom label(InActive_Account_Notification_label) in sfdc
+
+
+    public static void notifyToAccountOwner_new(List < Account > lstAccs, map < id, Account > old_Map) {
+        if (recurdivecheck == true) {
+
+            List < Messaging.SingleEmailMessage > lstEmails = new List < Messaging.SingleEmailMessage > ();
+            String[] toAddresses = new String[] {};
+            string[] toAddressesCC = new string[] {};
+            EmailTemplate templateId = [Select id, subject, body from EmailTemplate where name = 'notifyToAccountOwnertemplate'];
+            string tempsub = templateId.Subject;
+            string tempbody = templateId.Body;
+            List < Id > ownerids = new List < Id > ();
+            List < Id > setAccIds = new List < Id > ();
+            system.debug('lstAccs------->' + lstAccs);
+            Map < Id, Integer > mapContactCount = new Map < Id, Integer > ();
+            Map < Id, Integer > mapOppCount = new Map < Id, Integer > ();
+
+            List < InActive_Account_Notification__mdt > lstMetaData = [Select MasterLabel, Email_List__c from InActive_Account_Notification__mdt];
+            system.debug('lstMetaData------->' + lstMetaData);
+            Map < String, String > map_InActiveEmails = new Map < String, String > ();
+            if (lstAccs != null && lstAccs.size() > 0 && lstMetaData != null && lstMetaData.size() > 0) {
+                for (InActive_Account_Notification__mdt eachIAEmail: lstMetaData)
+                    map_InActiveEmails.put(eachIAEmail.MasterLabel, eachIAEmail.Email_List__c);
+            }
+
+            System.debug('==================LstAccs=================' + lstAccs);
+            if (lstAccs != null && lstAccs.size() > 0) {
+                for (Account eachacc: lstAccs) {
+                    /*system.debug('old_map=======>>>' + old_Map);
+                    system.debug('lstAccs========>>>' + lstAccs);
+                    system.debug('eachacc.inActive====>>>' + eachacc.Inactive__c);
+                    system.debug('old_Map.get(eachacc.id).Inactive__c ======>>>' + old_Map.get(eachacc.id).Inactive__c);*/
+                    if (eachacc.Inactive__c == true && old_Map.get(eachacc.id).Inactive__c != eachacc.Inactive__c) {
+                        setAccIds.add(eachacc.id);
+                        ownerIds.add(eachacc.OwnerId);
+                        System.debug('setAccIds------->' + setAccIds);
+                    }
+
+
+                }
+            }
+
+            if (ownerIds != null && ownerIds.size() > 0) {
+                Map < Id, user > userMap = new Map < Id, user > ([select Name, Email from User where Id in: ownerIds]); // set check missing
+                System.debug('userMap-------------->' + userMap);
+
+                if (setAccIds != null && setAccIds.size() > 0) {
+                    system.debug('=====setaccids=====' + setaccids);
+                    // Prepare contact count in respect of account id.
+                    List < Contact > lstContact = [Select id, accountId from contact where AccountId IN: setAccIds]; // Set Check Missing
+                    system.debug('=====lstcontact=====' + lstcontact);
+                    List < opportunity > lstAccOpp = [Select id, accountId from opportunity where AccountId IN: setAccIds]; // Set Check Missing
+                    // List Check Missing
+                    system.debug('lstAccs------>>' + lstAccs);
+                    system.debug('lstContact---->>:' + lstContact);
+                    if (lstContact != null && lstContact.size() > 0) {
+                        for (Contact eachCon: lstContact) {
+                            if (!mapContactCount.containsKey(eachCon.AccountId))
+                                mapContactCount.put(eachCon.AccountId, 1);
+                            else
+                                mapContactCount.put(eachCon.AccountId, mapContactCount.get(eachCon.AccountId) + 1);
+                        }
+                    }
+                    System.debug('mapContactCount------------->' + mapContactCount);
+                    // Prepare contact count in respect of account id.
+                    if (lstAccOpp != null && lstAccOpp.size() > 0) // List Check missing
+                    {
+                        for (Opportunity eachOpp: lstAccOpp) {
+                            if (!mapOppCount.containsKey(eachOpp.AccountId))
+                                mapOppCount.put(eachOpp.AccountId, 1);
+                            else
+                                mapOppCount.put(eachOpp.AccountId, mapOppCount.get(eachOpp.AccountId) + 1);
+                        }
+                    }
+                }
+                System.debug('mapOppCount------------->' + mapOppCount);
+                if (mapContactCount.size() > 0 || mapOppCount.size() > 0) {
+                    if (lstAccs != null && lstAccs.size() > 0) {
+                        Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
+                        for (Account eachAcc: lstAccs) {
+                            if (eachacc.Inactive__c == true && old_Map.get(eachacc.id).Inactive__c != eachacc.Inactive__c) {
+                                User theUser = userMap.get(eachacc.ownerId);
+                                Integer contactCount = mapContactCount.containsKey(eachacc.id) ? mapContactCount.get(eachacc.id) : 0;
+                                Integer OppotunityCount = mapOppCount.containsKey(eachacc.id) ? mapOppCount.get(eachacc.id) : 0;
+
+                                tempsub = tempsub.replace('{!Account.Name}', eachAcc.Name);
+                                tempbody = tempbody.replace('{!Account.OwnerName}', userMap.get(eachacc.ownerId).Name);
+                                tempbody = tempbody.replace('{!ContactCount}', string.valueOf(contactCount));
+                                tempbody = tempbody.replace('{!OppotunityCount}', string.valueOf(OppotunityCount));
+                                toAddresses.add(theUser.Email);
+
+                                if (map_InActiveEmails.containsKey(string.valueOf(eachacc.Id).substring(0, 15))) {
+                                    toAddressesCC = map_InActiveEmails.get(string.valueOf(eachacc.Id).substring(0, 15)).split(',');
+                                } else {
+                                    String customLabelAdditionalEmails = Label.InActive_Account_Notification_label;
+                                    if (customLabelAdditionalEmails != null && customLabelAdditionalEmails.length() > 0) {
+                                        toAddresses = customLabelAdditionalEmails.split(',');
+                                        toAddresses.add(theUser.Email);
+                                    }
+                                }
+                            }
+                        }
+
+                        system.debug('tempsub=======>>>' + tempsub);
+
+                        if (toAddresses != null && toAddresses.size() > 0) {
+                            mail.setToAddresses(toAddresses);
+                        }
+
+                        if (toAddressesCC != null && toAddressesCC.size() > 0) {
+                            mail.setCcAddresses(toAddressesCC);
+                        }
+
+                        if (tempsub != null && tempsub.length() > 0) {
+                            mail.setSubject(tempsub);
+                        }
+                        if (tempbody != null && tempbody.length() > 0) {
+                            mail.setPlainTextBody(tempbody);
+                        }
+
+                        if (mail != null) {
+                            lstEmails.add(mail);
+                        }
+
+                    }
+                }
+            }
+            if (lstEmails != null && lstEmails.size() > 0) {
+                try {
+                    Messaging.sendEmail(lstEmails);
+                    system.debug('Test_email-------->>>>>' + lstEmails);
+                } catch (Exception excep) {
+                    System.debug('There is an internal error, please reach out to admin team on \'sfdc-admin@arista.com\' email alias.' + excep);
+                }
+            }
+
+        }
+    }
+     //=========================================Added By Swati(06/03/2019)
+    //===This Method is used to Manage or Unmanage Account On Cpp After Update
+      Public static void ManageOnUpdate(List<Account>lstNewAccount,Map<Id,Account> MapOldAccount)
+      {
+            set<Account> setAccForUpdate = new set<Account>();
+            if(lstNewAccount !=null && lstNewAccount.size()>0)
+            {
+                for(Account eachAcc : lstNewAccount)
+                {
+                    if(eachAcc.Customer_Id__c != null && eachAcc.Cloud_Account_Managed_By__c != MapOldAccount.get(eachAcc.Id).Cloud_Account_Managed_By__c)
+                    {
+                        setAccForUpdate.add(eachAcc);
+                    }
+                }
+             }
+                if(setAccForUpdate != null && setAccForUpdate.size() > 0)
+                    System.enqueueJob(new ManageOnCppQueueable(setAccForUpdate,MapOldAccount,true));
+        }
+        //===This Method is used to Unmanage Account On Cpp Before Delete 
+        Public static void ManageOnDelete(Map<Id,Account> MapOldAccount)
+        {  
+            List<Account> lstEndUser = [select id from Account where cloud_Account_Managed_by__c IN :MapOldAccount.keySet()];
+            set<Id> setEndUserIds = new set<Id>();
+            if(lstEndUser!=null && lstEndUser.size()>0)
+            {
+                for(Account objAcc : lstEndUser)
+                {
+                    setEndUserIds.add(objAcc.Id); 
+                }
+            }
+            if(setEndUserIds!=null && setEndUserIds.size()>0)
+            {
+                System.enqueueJob(new ManageOnCppQueueable(MapOldAccount,true,setEndUserIds));
+            }
+        }
+              
+    //==========================================Swati Change End
+}

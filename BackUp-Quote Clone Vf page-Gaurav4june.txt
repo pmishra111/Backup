@@ -1,0 +1,86 @@
+<apex:page standardController="Quote" extensions="Quotes_Clone_Controller" id="Quote_Clone_page">
+	<script>
+        function funSendValue(AccountId)
+        {
+            var Quote_Oppname =document.getElementById("Quote_Clone_page:Quote_Clone_form_id:Quote_Clone_Block:Quote_Clone_sec:Quote_Opportunityid_block:Quote_Opportunity_inputname").value;
+            Quote_Oppname='';
+            document.getElementById("Quote_Clone_page:Quote_Clone_form_id:Quote_Clone_Block:Quote_Clone_sec:Quote_Opportunityid_block:Quote_Opportunity_inputname").value='';
+            AccountIdOnchange();
+        }
+    </script>
+	<script>
+      function funSendOpp(OpportunityId)
+       { 
+         OppIdOnchange();
+       }
+    </script>
+	<apex:form id="Quote_Clone_form_id">
+		<apex:actionFunction name="AccountIdOnchange" action="{!MethodForAccountId}" reRender="Quote_Clone_form_id"/>
+		<apex:actionFunction name="OppIdOnchange" action="{!MethodForOppId}" reRender="Quote_Clone_form_id"/>
+		<apex:outputPanel style="display:none">
+			<apex:outputField value="{!Quote.Opportunity.Name}"/>
+		</apex:outputPanel>
+		<apex:pageBlock title="Quote Clone" id="Quote_Clone_Block">
+			<apex:pageMessages id="showmsg"></apex:pageMessages>
+			<apex:pageBlockSection id="Quote_Clone_sec"  columns="2">
+				<apex:pageBlockSectionItem >
+					<apex:outputLabel value="New Quote Name" for="new_name"/>
+					<apex:inputText id="new_name" value="{!dummyQuote.name}"/>
+				</apex:pageBlockSectionItem>
+				<br/>
+				<br/>
+				<apex:inputField id="account_id" value="{!lstQuote[0].Opportunity.AccountID}" onchange="funSendValue(this);" required="true"/>
+				<!-- <apex:pageBlockSectionItem id="Quote_Opportunityid_block"> -->
+				<apex:pageBlockSectionItem id="Quote_Opportunityid_block">
+					<apex:outputLabel value="Opportunity"  />
+					<apex:outputPanel >
+						<apex:inputHidden value="{!oppId}" id="Quote_Opportunity_inputid"/>
+						<apex:inputText size="20" value="{!oppName}" id="Quote_Opportunity_inputname" style="float:left" onchange="funSendOpp(this);"/>
+						<a href="#" onclick="openLookupPopup('{!$Component.Quote_Opportunity_inputname}', '{!$Component.Quote_Opportunity_inputid}');return false" style="float:left">
+							<img src="/img/s.gif" alt="Opportunity Name Lookup (New Window)" class="lookupIcon" onblur="this.className = 'lookupIcon';" onfocus="this.className = 'lookupIconOn';"
+                             onmouseout="this.className = 'lookupIcon';this.className = 'lookupIcon';" onmouseover="this.className = 'lookupIconOn';this.className = 'lookupIconOn';" 
+                             title="Opportunity Name Lookup (New Window)"/>
+						</a>
+					</apex:outputPanel>
+				</apex:pageBlockSectionItem>
+			</apex:pageBlockSection>
+			<apex:pageBlockButtons Location="bottom">
+				<apex:commandButton action="{!save}" value="Save" style="margin-left:140px;"/>
+				<apex:commandButton action="{!cancel}" value="Cancel" immediate="true"/>
+			</apex:pageBlockButtons>
+			<apex:pageBlockSection >
+				<apex:inputCheckbox value="{!NoUpdateQLI}" label="Unrequired quote line items" style="width: 15px;height: 15px" />
+			</apex:pageBlockSection>
+		</apex:pageBlock>
+		<apex:inputhidden value="{!cloneQuoteID}" id="Quote_clonerecord_id"/>
+		<apex:inputHidden value="{!quote.Pricebook2Id}" id="Quote_Pricebookid" />
+		<apex:inputHidden value="{!quote.CurrencyIsoCode}" id="Quote_CurrencyCode" />
+		<script>
+    var newWin=null; 
+    function openLookupPopup(name,id) 
+    {
+        var account_name='{!StrAccountName}';
+        var Quote_Opp_id=document.getElementById("{!$Component.Quote_Clone_page.Quote_Clone_form_id.Quote_Clone_Block.Quote_Clone_sec.Quote_Opportunityid_block.Quote_Opportunity_inputid}").value; 
+        var Quote_Opp_name=document.getElementById("{!$Component.Quote_Clone_page.Quote_Clone_form_id.Quote_Clone_Block.Quote_Clone_sec.Quote_Opportunityid_block.Quote_Opportunity_inputname}").value;
+        var Quote_record_id=document.getElementById("Quote_Clone_page:Quote_Clone_form_id:Quote_clonerecord_id").value;
+        var PBId=document.getElementById("Quote_Clone_page:Quote_Clone_form_id:Quote_Pricebookid").value;
+        var ISOCode=document.getElementById("Quote_Clone_page:Quote_Clone_form_id:Quote_CurrencyCode").value;
+        var url="/apex/customLookupchild?namefield=" + name +"&idfield=" +id+"&parentid="+Quote_Opp_id+"&parentname="+Quote_Opp_name+"&Allaccounts="+account_name+"&Quotecloneid="+Quote_record_id+"&PBId="+PBId+"&ISOCode="+ISOCode; 
+        
+        newWin=window.open(url, 'Popup','height=500,width=600,left=700,top=315,resizable=no,scrollbars=yes,toolbar=no,status=no'); 
+        if (window.focus) 
+        { 
+            newWin.focus(); 
+        } 
+        return false; 
+    } 
+    function closeLookupPopup() 
+    { 
+        if (newWin!=null)
+        { 
+            newWin.close(); 
+        } 
+    }
+    </script>
+	</apex:form>
+</apex:page>

@@ -1,0 +1,68 @@
+{!REQUIRESCRIPT('//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js')}
+{!REQUIRESCRIPT('//ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/jquery-ui.min.js')}
+{!REQUIRESCRIPT("/soap/ajax/37.0/connection.js")} 
+try{
+jQuery(function() {
+							/*Append the jQuery CSS CDN Link to the Head tag.*/
+							jQuery('head').append('<link rel="stylesheet" href="//ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/themes/start/jquery-ui.css" type="text/css" />');
+
+							/*Create the HTML(DIV Tag) for the Dialog.*/
+							var quoteRec = sforce.connection.query("select id, Product2.Name , Product2.IsActive , QuoteId from QuoteLineItem where QuoteId='" + '{!Quote.Id}' + "' AND Product2.IsActive=false "); 
+							var records1 = quoteRec.getArray('records'); 
+
+							var abc="";
+							if(records1 != null)
+							{
+							for (var i=0; i< records1.length; i++) {
+							var record = records1[i];
+							abc += record.Product2.Name + "<br/>";
+							}
+							}
+
+
+							var iframe_url = '{!URLFOR("/apex/QuotesClonePage")}'+'?id={!Quote.Id}' ;
+							if(abc != null && abc != "")
+							{			
+							var html = 
+							'<div id="dialog" title="InActive Product"><p> "The following products are Inactive in SFDC and will not be added to the cloned quote
+:- " <br/>'+abc+'</p></div>';
+
+
+							/*Check if the Dialog(DIV Tag) already exists if not then Append the same to the Body tag.*/
+							if(!jQuery('[id=dialog]').size()){
+							jQuery('body').append(html);
+							}    
+
+							/*Open the jQuery Dialog.*/ 
+							jQuery( "#dialog" ).dialog({
+																																		autoOpen: true,
+																																		modal: true,
+																																		width: 'auto',
+																																		height: 'auto',
+																																		show: {
+																																	effect: "bounce",
+																																		duration: 100
+																																		},
+																																		hide: {
+																																		effect: "bounce",
+																																		duration: 100
+																																		},
+																																		buttons: {
+																																		"Continue": function() {
+																																		location.replace(iframe_url);
+																																		jQuery( this ).dialog( "close" );
+																																		},
+																																		Cancel: function() {
+																																		jQuery( this ).dialog( "close" );
+																																		}
+																																		}
+																																		});
+							}else
+							{
+							location.replace(iframe_url);
+							}
+							}); 
+}
+catch(e){
+alert('An Error has Occured. Error: ' + e);
+}

@@ -1,0 +1,18 @@
+Add/Remove Functionality in a VF page for Creating Multiple Records For a Particular Object.
+http://salesforceworld4u.blogspot.com/2014/01/addremove-functionality-in-vf-page-for.html
+
+http://sfdcmonkey.com/2017/08/09/add-delete-rows-dynamic/
+http://sfdcmonkey.com/2019/03/05/create-expand-collapse-sections-salesforce-lightning/
+http://sfdcmonkey.com/2019/05/02/simple-to-do-list-app-salesforce-lightning/
+https://lightningdesignsystem.com/platforms/visualforce/
+https://www.biswajeetsamal.com/blog/dynamic-add-delete-row-in-lightning-component/
+
+=====================
+for study
+https://javascript.info/array-methods
+https://lightningdesignsystem.com/utilities/grid/
+https://developer.salesforce.com/docs/component-library/bundle/lightning:accordionSection/example
+https://www.sfdcpanther.com/how-to-use-field-set-in-lightning-component/
+http://www.vinaychaturvedi.com/blog/learn-salesforce-lightning-with-examples-part-1-create-records-using-lightning-components/
+https://developer.mulesoft.com/guides/quick-start/developing-your-first-mule-application
+

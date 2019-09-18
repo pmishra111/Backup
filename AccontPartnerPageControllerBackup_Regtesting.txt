@@ -1,0 +1,635 @@
+/*
+Created By : Kloudrac.com
+Description: This class is a controller of page 'accountEndUser' and 'AccountPartner' which is used to create the Accounts in SFDC.
+
+Update History:
+===================================================================================================================================
+Updated By: Radhe Shyam(rshyam@kloudrac.com);    Update Description: Added Try Catch for Method 'WebSiteChecker';   Date 21 Aug 2018
+Updated By: Radhe Shyam(rshyam@kloudrac.com);    Update Description: Stopped WebSiteChecker method calling 3 places. Date 21 Aug 2018
+Updated By: Neha Saxena(nsaxena@kloudrac.com);   Update Description: Add notification in catch section for Method 'WebSiteChecker' 23 Aug 2018
+Updated By: Neha Saxena(nsaxena@kloudrac.com);   Added Custom Setting in WebsiteCheker to make it on/off from custom setting if any issue occur in WHOSAPI 06 Dec 2018
+
+*/
+
+public class extAccountController
+{
+    public String strCallJS { get ; set ; }
+    public string isValidDomain { get ; set ;}
+    String rtId;
+    public List<Account> lstAccount {get;set;}
+    public boolean flag {get;set;}
+    public boolean isDupeCheck{get;set;}
+    public Account acc {get;set;}
+    public boolean isException=false;
+    public boolean isWrongPassword=false;
+    
+    public boolean isTrue { get ; set ; } 
+    
+    public extAccountController(ApexPages.StandardController controller)
+    {
+        isValidDomain = 'false';
+        flag = false;
+        buttonHide = true;
+       // isDupeCheck= true;
+        acc = new Account();
+        lstWrapper = new List<Wrapper>();  
+        rtId = Apexpages.CurrentPage().getParameters().get('RecordType');
+    }
+    
+    public Pagereference redirectPage()
+    {
+        String rtName = null;
+        rtName = Schema.SObjectType.Account.getRecordTypeInfosById().get(rtId).getName();
+        system.debug('rtName ---->>>>>' +rtName);
+        if(rtName == 'Partner')
+        {
+            Pagereference page = new Pagereference('/apex/AccountPartner?RecordType=' + rtId + '&retURL=%2F001%2Fo&save_new=1&sfdc.override=1&ent=Account');
+            page.setRedirect(true);
+            return page;    
+        }
+        
+        /*if(rtName == 'End User'){
+            page = new Pagereference('/apex/accountEndUser?ent=Account&RecordType='+rtId+'&retURL=%2F001%2Fo&save_new=1&sfdc.override=1');
+            page.setRedirect(true);
+            return page;    
+        }*/
+         
+        return null;
+    }
+    
+    public List<wrapper> lstWrapper {get;set;}
+    public class wrapper
+    {
+        public Account accObject {get;set;}
+        public boolean isSelected {get;set;}
+        
+        public wrapper(Account acc)
+        {
+            this.accObject  = acc;
+            this.isSelected = false;
+        }    
+    }
+    public boolean WebSiteChecker(String AccId,String WebSite)
+    {      
+        //get Custom Setting
+        TriggerEnabled__c website_Check = TriggerEnabled__c.getInstance('WebsiteChekerOnAccountCreation');
+        if(website_Check==null || website_Check.Active__c==true){
+            try{ 
+            Http h = new Http();
+            HttpRequest req1 = new HttpRequest();
+            req1.setHeader('Content-Type','application/json');
+            req1.setHeader('accept','application/json');
+            req1.setMethod('GET');
+            String Password=EncodingUtil.urlEncode(label.websitePassword, 'UTF-8');
+            string sEndPoint='https://www.whoisxmlapi.com/whoisserver/WhoisService?domainName='+WebSite+'&username='+Label.userNameForDomain+'&password='+Password+'&Format= JSON';
+            system.debug('----- sEndPoint: '+ sEndPoint);
+            req1.setEndpoint(sEndPoint);
+            req1.setTimeout(120000);
+            HttpResponse res = h.send(req1);
+            system.debug('---- req: ' + req1);
+            system.debug('---- ResPonse: ' + res.getBody());
+            String responseString= res.getBody();
+            Account ObjAcc=new Account(id=AccId);
+            system.debug('responseString-------------SFDC------->'+(responseString));
+            System.debug('Web Checker');
+            
+            if(responseString.contains('ErrorMessage') && responseString.contains('Invalid username/password')){
+                //Need to send Email to Admin Team, Skip all checks and allow user to create Account
+                isWrongPassword = true;
+                return false;
+            }
+            else if((responseString.contains('MISSING_WHOIS_DATA')) || (responseString.contains('ErrorMessage'))){
+                return true;
+            }       
+            else {
+                 return false;
+            }
+            
+            
+            }Catch(Exception e){
+                isException =true;
+                system.debug('Exception: responseString-------------SFDC------->');
+                 return false;
+            }
+        }
+        else
+        {
+            return false;
+        }
+    }
+    
+    public pagereference SaveEndUser()
+    {
+     try{
+        Boolean iswhere = false;
+        Boolean isbracket = false;
+        String rtypeName =  Schema.SObjectType.Account.getRecordTypeInfosById().get(rtId).getName();   
+         system.debug('rtypeName-----------.>>>>>'+ rtypeName);
+        String query = 'Select id,name,billingcountry,website_Name_Invalid__c,billingstate,website,Phone,OwnerId,Owner.Name, Company__c,No_of_opportunity__c,NetSuiteID__c,'
+                     + 'Active_Service_Contract__c,Do_Not_Support__c,'
+                     //+ 'Exception_Service_Percentage__c,'
+                     + 'CreatedById ,CreatedBy.Name,CreatedDate ,LastModifiedby.Name, '
+                     + 'LastModifiedById,LastModifiedDate '
+                     + 'from Account '
+                     + 'Where RecordType.Name = \'' + rtypeName + '\'';
+           
+        if(acc.Name != null && acc.Name != '')
+        {
+            iswhere=true;           
+            string strName = acc.Name;
+            StrName = strName.contains('\'')?strName.replace('\'',' '):strName;
+            strName=strName.contains(' ') ?strName.split(' ')[0]:strName;
+            query = query +' AND ( Name like \'%' + strName + '%\'';
+        }
+        
+        if(acc.website != null && acc.website != '')
+        {   
+            string strWeb = acc.website;
+            query = iswhere? query + ' OR Website=\'' + strWeb + '\')':query + ' OR Website=\'' + strWeb + '\''; 
+            isbracket=true;          
+        }
+        
+        if(iswhere && !isbracket)
+            query +=')';
+        //query.replace('Where','');
+        query=query+ ' limit 20';
+        system.debug('---query---'+query);
+  
+        List<Account> lstAccount = Database.query(query);
+        system.debug('lstAccount' + lstAccount);
+       
+        if(lstAccount != null && lstAccount.size() > 0)
+        {
+            flag = true;
+            for(Account acc : lstAccount)
+            {
+                    
+                   system.debug( 'acc--websie ------>' +acc);  
+                    if( acc.Name != null && acc.Website != null && acc.website_Name_Invalid__c != true)
+                    {  
+                       boolean IsWebsiteCorrect = WebSiteChecker( acc.id, acc.website); 
+                        wrapper w = new wrapper(acc);
+                                lstWrapper.add(w);
+                                //6/12/2018: Avoid validation for this website
+                            if( IsWebsiteCorrect == true )
+                            {
+                                system.debug( 'acc--websie -True----->' +IsWebsiteCorrect+'---websitw---'+acc.website);
+                                ApexPages.Message myMsg = new ApexPages.Message(ApexPages.Severity.ERROR,'Website does not exists. Please insert correct website.');
+                                ApexPages.addMessage(myMsg);
+                                return null;
+                            }
+                           else if(IsWebsiteCorrect == false)
+                            {
+                                system.debug( 'IsWebsiteCorrect----------> '+IsWebsiteCorrect  );
+                            }
+                        
+                    }
+                   
+                  
+            }
+            //acc.recordtypeid = rtId;
+            //Insert acc;
+        }
+        else
+        {
+            if( isValidDomain != 'false' )
+            acc.website_Name_Invalid__c = true;
+            acc.recordtypeid = rtId;
+            system.Debug('acc.id,---->  acc.web'+ acc.id + '////'+ acc.website);
+            boolean IsWebsiteCorrect = WebSiteChecker( acc.id, acc.website); 
+                            if( IsWebsiteCorrect == true)
+                            {
+                                system.debug( 'acc--websie -True----->' +IsWebsiteCorrect);
+                                ApexPages.Message myMsg = new ApexPages.Message(ApexPages.Severity.ERROR,'Website does not exists. Please insert correct website.');
+                                ApexPages.addMessage(myMsg);
+                                return null;
+                           }
+                           else if(IsWebsiteCorrect == false)
+                            {
+                                system.debug( 'IsWebsiteCorrect----------> '+IsWebsiteCorrect  );
+                                 Insert acc;
+                                 if(isException ==true && acc!=null)
+                                    { 
+                                    system.debug( 'isException----------> '+isException  );
+                                    system.debug( 'Account Id----------> '+acc.id  );
+                                    String body= '<h3>Hi SFDC Admin,&nbsp;</h3><h3><strong><span style="color: #ff0000;">*******URGENT NOTIFICATION, IMMEDIATE&nbsp;ACTION REQUIRED**********</span></strong></h3><h4>An error has occurred during account creation while validating website address with WHOISAPI.</h4><h4>The Account has been created for now but the Website has not been validated for this Account. </h4><h4>Please Look into this issue and take appropriate action.&nbsp;</h4><p><strong><span style="color: #0000ff;">Link is :&nbsp;'+URL.getSalesforceBaseUrl().toExternalForm() +'/' +acc.id+'</span></strong></p><h4>Thanks</h4><h4>ARISTA TEAM</h4><p>&nbsp;</p>';
+                                     ARISTA_ExceptionHandler.sendEmailToAdmins('WHOISAPI : Account Creation Error', 'Issue in Account Creation due to WHOISAPI', body);
+                                     system.debug( 'Mail Sent ----------> '+isException  );
+                                     isException =false;
+                                    }
+                                    
+                                    if(isWrongPassword && acc!=null){
+                                    system.debug( 'isWrongPassword----------> '+isWrongPassword  );
+                                    system.debug( 'Account Id----------> '+acc.id  );
+                                    String body= '<h3>Hi SFDC Admin,&nbsp;</h3><h3><strong><span style="color: #ff0000;">*******URGENT NOTIFICATION, IMMEDIATE&nbsp;ACTION REQUIRED**********</span></strong></h3><h4>An error has occurred during account creation while validating website address with due to Wrong Username and Password of WHOISAPI.</h4><h4>The Account has been created for now but the Website has not been validated for this Account. </h4><h4>Please Look into this issue and take appropriate action.&nbsp;</h4><p><strong><span style="color: #0000ff;">Link is :&nbsp;'+URL.getSalesforceBaseUrl().toExternalForm() +'/' +acc.id+'</span></strong></p><h4>Thanks</h4><h4>ARISTA TEAM</h4><p>&nbsp;</p>';
+                                     ARISTA_ExceptionHandler.sendEmailToAdmins('WHOISAPI : Account Creation Error', 'Issue in Account Creation due to WHOISAPI', body);
+                                     system.debug( 'Mail Sent ----------> '+isWrongPassword  ); 
+                                     isWrongPassword=false;
+                                    }
+                                    
+                            }
+            //Insert acc;
+            
+            Pagereference page = new Pagereference('/'+acc.Id);
+            page.setRedirect(true);
+            return page;
+           
+        }
+       }
+       catch(Exception ex){
+            ApexPages.addMessages(ex);
+       } 
+       return null;
+    }
+    
+    private static String joinList(List<String> theList, String separator)
+    {
+        if (theList == null)
+            return null;
+        if (separator == null)
+            separator = '';
+
+        String joined = '';
+        Boolean firstItem = true;
+        for (String item : theList)
+        {
+            if(item != null)
+            {
+                if(firstItem)
+                    firstItem = false;
+                else
+                    joined += separator;
+                joined += item;
+            }
+        }
+        return joined;
+    }
+    
+    public Boolean buttonHide{get;set;}
+    public void checkListChecked()
+    {
+       //if(lstwrapper.size()>0){
+           isDupeCheck= true;
+      // }else{
+       
+       //  isDupeCheck= false;
+       
+      // }
+        integer count = 0;
+        for(wrapper ww : lstWrapper)
+        {
+            if(ww.isSelected == true)
+                count++;
+        }
+        if(count == 0)
+            buttonHide = true;
+        if(count>0)
+            buttonHide = false;
+    }
+    public pagereference submit()
+        
+    {
+            system.debug('acc.id--->'+ acc.id);
+
+     try{
+         boolean IsWebsiteCorrect = WebSiteChecker( acc.id, acc.website);//Commented for CR-006601 - Urgent ACC Deployment
+         // boolean IsWebsiteCorrect = false; 
+        if( IsWebsiteCorrect == true )
+           {
+                                //wrapper w = new wrapper(acc);
+                                //lstWrapper.add(w);
+                                ApexPages.Message myMsg = new ApexPages.Message(ApexPages.Severity.ERROR,'Website is not correct. Please insert in correct format.');
+                                ApexPages.addMessage(myMsg);
+                                return null;
+           }
+             
+        else If(acc.Dupe_Account_Reason__c == '' || acc.Dupe_Account_Reason__c == null)
+        {
+            ApexPages.Message myMsg = new ApexPages.Message(ApexPages.Severity.FATAL,'"New Account Creation Reason" should not be blank while creating new account.');
+            ApexPages.addMessage(myMsg);
+            return null;
+        }
+        
+        else
+        {
+            acc.recordtypeid = rtId;
+            Insert acc;
+            if(isException ==true && acc!=null)
+                                    { 
+                                    system.debug( 'isException----------> '+isException  );
+                                    system.debug( 'Account Id----------> '+acc.id  );
+                                    String body= '<h3>Hi SFDC Admin,&nbsp;</h3><h3><strong><span style="color: #ff0000;">*******URGENT NOTIFICATION, IMMEDIATE&nbsp;ACTION REQUIRED**********</span></strong></h3><h4>An error has occurred during account creation while validating website address with WHOISAPI.</h4><h4>The Account has been created for now but the Website has not been validated for this Account. </h4><h4>Please Look into this issue and take appropriate action.&nbsp;</h4><p><strong><span style="color: #0000ff;">Link is :&nbsp;'+URL.getSalesforceBaseUrl().toExternalForm() +'/' +acc.id+'</span></strong></p><h4>Thanks</h4><h4>ARISTA TEAM</h4><p>&nbsp;</p>';
+                                     ARISTA_ExceptionHandler.sendEmailToAdmins('WHOISAPI : Account Creation Error', 'Issue in Account Creation due to WHOISAPI', body);
+                                     system.debug( 'Mail Sent ----------> '+isException  );
+                                     isException =false;
+                                    }
+                                    
+                                    if(isWrongPassword && acc!=null){
+                                    system.debug( 'isWrongPassword----------> '+isWrongPassword  );
+                                    system.debug( 'Account Id----------> '+acc.id  );
+                                    String body= '<h3>Hi SFDC Admin,&nbsp;</h3><h3><strong><span style="color: #ff0000;">*******URGENT NOTIFICATION, IMMEDIATE&nbsp;ACTION REQUIRED**********</span></strong></h3><h4>An error has occurred during account creation while validating website address with due to Wrong Username and Password of WHOISAPI.</h4><h4>The Account has been created for now but the Website has not been validated for this Account. </h4><h4>Please Look into this issue and take appropriate action.&nbsp;</h4><p><strong><span style="color: #0000ff;">Link is :&nbsp;'+URL.getSalesforceBaseUrl().toExternalForm() +'/' +acc.id+'</span></strong></p><h4>Thanks</h4><h4>ARISTA TEAM</h4><p>&nbsp;</p>';
+                                     ARISTA_ExceptionHandler.sendEmailToAdmins('WHOISAPI : Account Creation Error', 'Issue in Account Creation due to WHOISAPI', body);
+                                     system.debug( 'Mail Sent ----------> '+isWrongPassword  ); 
+                                     isWrongPassword=false;
+                                    }
+
+            Pagereference page = new Pagereference('/'+acc.Id);
+            page.setRedirect(true);
+            return page;
+           
+        }
+       }
+       catch(Exception ex){
+            ApexPages.addMessages(ex);
+       } 
+       return null;
+    }
+    
+    public pagereference updateAccount()
+    {
+        System.debug('----method updateAccount is accessed--->');
+        integer count = 0;                                 
+        Set<Id> setAccountId = new Set<Id>();
+        List<Account> lstAccount = new List<Account>();
+         //Akshay: added method to validate the Website field.
+         TriggerEnabled__c trigger_CustomSetting1 = TriggerEnabled__c.getInstance('AccountUpdaterWebsiteChecker');
+        try
+        {
+            for(wrapper ww : lstWrapper)
+            {
+                if(ww.isSelected == true)
+                {
+                    setAccountId.add(ww.accObject.Id);
+                    count++;
+                }
+            }
+            System.debug('check--------------'+count);
+            
+            if(count == 0 )
+            {
+                ApexPages.Message myMsg = new ApexPages.Message(ApexPages.Severity.ERROR,'Please select at-least one account.');
+                ApexPages.addMessage(myMsg);
+                return null;     
+            }
+            else if(count > 1 )
+            {
+                ApexPages.Message myMsg = new ApexPages.Message(ApexPages.Severity.ERROR,'You can only select one account to merge new values.');
+                ApexPages.addMessage(myMsg);
+                return null; 
+            }   
+            
+            List<String> accessibleFields = new List<String>();
+            Map<String, Schema.SObjectField> objectFields = Schema.getGlobalDescribe().get('Account').getDescribe().fields.getMap();
+
+            for(String s : objectFields.keySet())
+            {
+                accessibleFields.add(s);      
+            }
+            
+            String theQuery = 'SELECT ' + joinList(accessibleFields, ', ') + 
+                              ' FROM Account WHERE Id IN :setAccountId';
+            
+            system.debug('query..'+theQuery);
+            
+            lstAccount = Database.query(theQuery); 
+             
+            if(lstAccount != null && lstAccount.size() > 0)
+            {
+                for(Account accNew : lstAccount)
+                {
+                    accNew.Name = acc.Name;
+                    if(acc.Systems_Engineer__c != null && acc.Systems_Engineer__c != '')
+                        accNew.Systems_Engineer__c = acc.Systems_Engineer__c ;
+                    if(acc.Fax != null && acc.Fax != '')
+                        accNew.Fax= acc.Fax;
+                    if(acc.Phone != null && acc.Phone != '')
+                        accNew.Phone= acc.Phone;
+                    if(acc.Website != null && acc.Website != '' && trigger_CustomSetting1 != null && trigger_CustomSetting1.Active__c == true)
+                    {
+                        if(validateWebsite(acc.Website))
+                        {
+                            accNew.Website = acc.Website.toLowerCase(); 
+                            // bypass account validate method while updating the existing account. 
+                            clsRecusrsiveCheck.bypassTrgAccount_ForExitsingAccount = true; 
+                        }
+                        else
+                        {
+                            ApexPages.Message myMsg = new ApexPages.Message(ApexPages.Severity.Info,'Website is not correct. Please insert in correct format.');
+                            ApexPages.addMessage(myMsg);
+                            return null;
+                        }
+                       
+
+                    }
+                        
+                    if(acc.ParentId != null)
+                        accNew.ParentId= acc.ParentId;
+                    if(acc.Multi_National_Account__c!= null && acc.Multi_National_Account__c!= '')
+                        accNew.Multi_National_Account__c= acc.Multi_National_Account__c;
+                    if(acc.Deployment_Status__c!= null && acc.Deployment_Status__c!= '')
+                        accNew.Deployment_Status__c= acc.Deployment_Status__c;
+                    if(acc.Company__c != null && acc.Company__c != '')
+                        accNew.Company__c = acc.Company__c;
+                    if(acc.NoDelete__c != null)
+                        accNew.NoDelete__c = acc.NoDelete__c;
+                    if(acc.Send_Case_Creation_Email_to_Customer__c != null)
+                        accNew.Send_Case_Creation_Email_to_Customer__c = acc.Send_Case_Creation_Email_to_Customer__c;
+                    if(acc.Top_100_Account__c != null)
+                        accNew.Top_100_Account__c = acc.Top_100_Account__c;
+                    if(acc.Internal_URL__c != null && acc.Internal_URL__c != '')
+                        accNew.Internal_URL__c = acc.Internal_URL__c;
+                    if(acc.Active_Service_Contract__c != null)
+                        accNew.Active_Service_Contract__c = acc.Active_Service_Contract__c;
+                    if(acc.Expiration_Date__c != null)
+                        accNew.Expiration_Date__c = acc.Expiration_Date__c;
+                    //Commented by Mohit Sharma. REF: Akshay Kumar
+                    //if(acc.Exception_Service_Percentage__c != null)
+                        //accNew.Exception_Service_Percentage__c = acc.Exception_Service_Percentage__c;
+                     if(acc.Existing_Customer__c != null)
+                        accNew.Existing_Customer__c = acc.Existing_Customer__c ;
+                     if(acc.NetSuiteID__c != null && acc.NetSuiteID__c != '')
+                        accNew.NetSuiteID__c = acc.NetSuiteID__c ;
+                    if(acc.Industry != null && acc.Industry != '')
+                        accNew.Industry = acc.Industry ;
+                    if(acc.How_did_we_enter_the_account__c != null && acc.How_did_we_enter_the_account__c != '')
+                        accNew.How_did_we_enter_the_account__c = acc.How_did_we_enter_the_account__c ;
+                    if(acc.Description != null && acc.Description != '')
+                        accNew.Description = acc.Description;
+                    if(acc.Lag_time_salesready__c != null && acc.Lag_time_salesready__c != '')
+                        accNew.Lag_time_salesready__c = acc.Lag_time_salesready__c;
+                    if(acc.New_Logo__c != null)
+                        accNew.New_Logo__c = acc.New_Logo__c;
+                    if(acc.Partner_Type_Status__c != null && acc.Partner_Type_Status__c != '')
+                        accNew.Partner_Type_Status__c = acc.Partner_Type_Status__c;
+                    if(acc.Top_500_Account__c != null)
+                        accNew.Top_500_Account__c = acc.Top_500_Account__c;
+                    if(acc.BillingStreet != null && acc.BillingStreet != '')
+                        accNew.BillingStreet = acc.BillingStreet;
+                    if(acc.BillingCity != null && acc.BillingCity != '')
+                        accNew.BillingCity = acc.BillingCity;
+                    if(acc.BillingState != null && acc.BillingState != '')
+                        accNew.BillingState = acc.BillingState;
+                    if(acc.BillingPostalCode != null && acc.BillingPostalCode != '')
+                        accNew.BillingPostalCode = acc.BillingPostalCode;
+                    if(acc.BillingCountry != null && acc.BillingCountry != '')
+                        accNew.BillingCountry = acc.BillingCountry;
+                    if(acc.ShippingStreet != null && acc.ShippingStreet != '')
+                        accNew.ShippingStreet = acc.ShippingStreet;
+                    if(acc.ShippingCity != null && acc.ShippingCity != '')
+                        accNew.ShippingCity = acc.ShippingCity;
+                    if(acc.ShippingState != null && acc.ShippingState!= '')
+                        accNew.ShippingState= acc.ShippingState;
+                    if(acc.ShippingPostalCode != null && acc.ShippingPostalCode != '')
+                        accNew.ShippingPostalCode = acc.ShippingPostalCode;
+                    if(acc.ShippingCountry != null && acc.ShippingCountry != '')
+                        accNew.ShippingCountry = acc.ShippingCountry;
+                    if(acc.Registration_Termination_Date__c!= null)
+                        accNew.Registration_Termination_Date__c= acc.Registration_Termination_Date__c;
+                    if(acc.Ecosystem_Partners_Carried__c!= null && acc.Ecosystem_Partners_Carried__c!= '')
+                        accNew.Ecosystem_Partners_Carried__c= acc.Ecosystem_Partners_Carried__c;
+                    if(acc.of_SE_s_trained__c!= null)
+                        accNew.of_SE_s_trained__c= acc.of_SE_s_trained__c;
+                    if(acc.of_reps_certified__c!= null)
+                        accNew.Industry = acc.Industry;
+                    if(acc.of_reps_certified__c!= null)
+                        accNew.Industry = acc.Industry;
+                    if(acc.Lab_gear_in_place__c!= null)
+                        accNew.Lab_gear_in_place__c= acc.Lab_gear_in_place__c;
+                    if(acc.of_reps_who_have_sold_Arista__c!= null)
+                        accNew.of_reps_who_have_sold_Arista__c= acc.of_reps_who_have_sold_Arista__c;
+                    if(acc.Next_Steps__c!= null && acc.Next_Steps__c!= '')
+                        accNew.Next_Steps__c= acc.Next_Steps__c;
+                    if(acc.AnnualRevenue!= null)
+                        accNew.AnnualRevenue= acc.AnnualRevenue;
+                    if(acc.NumberOfEmployees!= null)
+                        accNew.NumberOfEmployees= acc.NumberOfEmployees;
+                   
+                }
+                
+                boolean flagCommentPresent = true;
+                
+              
+                    update lstAccount;
+                    system.debug('-----account updated----');
+                    
+                     //Insert Acount Team Member
+                    AccountTeamMember objAccTeam = new AccountTeamMember();
+                    objAccTeam.AccountId = lstAccount[0].Id;
+                    objAccTeam.UserId = UserInfo.getUserId();//lc.getOwnerId();
+                    insert objAccTeam;
+                    
+                    //acc.recordtypeid = rtId;
+                    //Insert acc;
+                    System.debug('ID'+lstAccount[0].Id);
+                    
+                    Pagereference page = new Pagereference('/'+lstAccount[0].Id);
+                    page.setRedirect(true);
+                    return page;
+                      
+            }
+        }
+        Catch(Exception ee)
+        {
+            ApexPages.Message myMsg = new ApexPages.Message(ApexPages.Severity.FATAL,ee.getMessage());
+            ApexPages.addMessage(myMsg);
+        }
+       
+        
+        return null;         
+    }
+
+      // Akshay: validate Website field.
+    public boolean validateWebsite(String strWebsiteName)
+    {
+        strWebsiteName = strWebsiteName.toLowerCase();
+
+        if(strWebsiteName.startsWithIgnoreCase('https://www.') || strWebsiteName.startsWithIgnoreCase('http://www.')) 
+        {
+
+          String repWebsite = strWebsiteName.replace('.', '@');
+          String splitWebsite = repWebsite.split('@')[0];
+          Boolean isValid1 = String.isNotBlank(splitWebsite) && String.isNotEmpty(splitWebsite) && (splitWebsite.equalsIgnorecase('http://www') || splitWebsite.equalsIgnorecase('https://www'))? true : false;  
+          if(!strWebsiteName.contains('..') && isValid1)
+          {
+            //String regex = '^((http|https)://)??(www[.])??([a-zA-Z0-9]|-)+?([.][a-zA-Z0-9(-|/|=|?)??]+?)+?$';
+            String regex = '(https?://(?:www\\.|(?!www))[a-zA-Z0-9-]+[a-zA-Z0-9]\\.[^\\s]{1,}|www\\.[a-zA-Z0-9-]+[a-zA-Z0-9]\\.[^\\s]{1,}|https?:\\/\\/(?:www\\.|(?!www))[a-zA-Z0-9]\\.[^\\s]{1,}|www\\.[a-zA-Z0-9]\\.[^\\s]{1,})';
+            Pattern websitePat = Pattern.compile(regex);
+            Matcher mtch = websitePat.matcher(strWebsiteName);
+            If(mtch.matches())
+                return true;
+            else
+                return false;
+          } 
+          else 
+            return false;
+             
+        }  //(str.subStringAfter('https://')).startsWithIgnorecase('www'))
+        else if((strWebsiteName.startsWithIgnoreCase('http://') || strWebsiteName.startsWithIgnoreCase('https://')) )
+        {
+            String websiteSubStr; 
+            boolean IsWebSiteCorrctName = true; 
+            if(strWebsiteName.startsWithIgnoreCase('https://'))
+                websiteSubStr = strWebsiteName.subStringAfter('https://');
+            else if(strWebsiteName.startsWithIgnoreCase('http://'))
+                websiteSubStr = strWebsiteName.subStringAfter('http://');
+            else 
+                websiteSubStr = null;
+            
+            System.debug('----------websiteSubStr'+websiteSubStr);
+            if(String.isNotEmpty(websiteSubStr) & String.isNotBlank(websiteSubStr) &&  websiteSubStr.startsWithIgnorecase('www.'))
+                IsWebSiteCorrctName = true;
+            else 
+            {
+                if(websiteSubStr.startsWithIgnorecase('w.') || websiteSubStr.startsWithIgnorecase('ww.'))
+                     IsWebSiteCorrctName = false;
+                 else
+                    IsWebSiteCorrctName = true; 
+
+            }
+                
+
+            System.debug('with http:--->'+IsWebSiteCorrctName);
+            System.debug('-------'+strWebsiteName);
+
+            if(!strWebsiteName.contains('..') && IsWebSiteCorrctName)
+            {
+                //String regex = '^((http|https)://)??(www[.])??([a-zA-Z0-9]|-)+?([.][a-zA-Z0-9(-|/|=|?)??]+?)+?$';
+                String regex = '(https?://(?:www\\.|(?!www))[a-zA-Z0-9-]+[a-zA-Z0-9]\\.[^\\s]{1,}|www\\.[a-zA-Z0-9-]+[a-zA-Z0-9]\\.[^\\s]{1,}|https?:\\/\\/(?:www\\.|(?!www))[a-zA-Z0-9]\\.[^\\s]{1,}|www\\.[a-zA-Z0-9]\\.[^\\s]{1,})';
+                Pattern websitePat = Pattern.compile(regex);
+                Matcher mtch = websitePat.matcher(strWebsiteName);
+                If(mtch.matches())
+                    return true;
+                else
+                    return false;
+            } 
+            else 
+                return false;
+        }
+        else if(strWebsiteName.startsWithIgnoreCase('www.') && ! strWebsiteName.containsIgnoreCase('http'))
+        {
+            if(!strWebsiteName.contains('..'))
+            {
+                //String regex = '^((http|https)://)??(www[.])??([a-zA-Z0-9]|-)+?([.][a-zA-Z0-9(-|/|=|?)??]+?)+?$';
+                String regex = '(https?://(?:www\\.|(?!www))[a-zA-Z0-9-]+[a-zA-Z0-9]\\.[^\\s]{1,}|www\\.[a-zA-Z0-9-]+[a-zA-Z0-9]\\.[^\\s]{1,}|https?:\\/\\/(?:www\\.|(?!www))[a-zA-Z0-9]\\.[^\\s]{1,}|www\\.[a-zA-Z0-9]\\.[^\\s]{1,})';
+                Pattern websitePat = Pattern.compile(regex);
+                Matcher mtch = websitePat.matcher(strWebsiteName);
+                If(mtch.matches())
+                    return true;
+                else
+                    return false;
+            } 
+            else 
+                return false;
+        }
+        else
+            return false;
+    }
+    public pageReference fun()
+    {
+        //isTrue = apexpages.currentPage().getParameters().get('isTrueValue');
+        //system.debug('isTrue ================>'+isTrue);
+        return null;
+    }
+    
+     
+}

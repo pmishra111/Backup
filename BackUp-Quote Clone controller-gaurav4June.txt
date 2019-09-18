@@ -1,0 +1,303 @@
+/*-------------------------------------------------------------------------------------------------------------------------
+Modified by:        Diksha Singh
+Company Name:       Kloudrac.com
+Description:        This class is used to clone the quote with the option of changement in Account and their related opportunity
+Test Class Name:    TestQuoteCloneClass
+--------------------------------------------------------------------------------------------------------------------------*/
+public with sharing class Quotes_Clone_Controller 
+{
+    // To fetch quote record
+    public id QTID {get;set;}
+   
+    public string Test{get;set;}
+    public List
+<Quote>lstQuote {get; set;}
+    // To rename the quote name for cloned record
+    public Quote dummyQuote {get; set;}
+    // To check duplicate quotes with/without products
+     public boolean NoUpdateQLI {get;set;} 
+    
+    public Quote qtRecord = new Quote (); 
+    Public Boolean ErrorMsg = False;
+    
+    //--------------------------------------------------------------------------
+    
+    // To fetch Account name onchange
+    public String StrAccountName{get;set;}
+    public String acname{get;set;}
+   
+    
+    //-----For fetching Account with their related opportunity id and name----
+    public String oppName { get; set; }
+    public String oppId { get; set; }
+   
+    // Id of the quote Record that has to be clone
+    public String cloneQuoteID{get;set;}
+    //------------------------------------------------------------------------
+     //List To store quoteLineitem fields record
+    private List
+	<QuoteLineItem> lstQuoteLineItem {get; set;}
+    public List
+		<String>lstQL{get;set;}
+     // List for inserting cloned record on quote
+     public list
+			<Quote> allrecords{get;set;} 
+     //To fetch BillingAddress of  Account 
+     public List<Account>lstAccount {set; get;}
+   
+   //-------------------------------------------------------------------------------
+   
+    public Quotes_Clone_Controller (ApexPages.StandardController controller)
+    {  
+      QTID = ApexPages.currentPage().getParameters().get('id');
+        system.debug('QTID--->'+QTID);
+       StrAccountName = ''; 
+       lstQuoteLineItem =new list
+				<QuoteLineItem>();
+        lstQL=new List
+					<String>();
+       lstAccount=new List
+						<Account>();
+       lstQuote= new List<quote>();
+       cloneQuoteID= ApexPages.currentPage().getParameters().get('id');      
+
+       qtRecord = (Quote) controller.getRecord();
+       system.debug('qtRecord ---------------------->'+qtRecord);
+       system.debug('quotecloneid'+cloneQuoteID );
+         
+        if(cloneQuoteID != null && cloneQuoteID != ''){
+           
+                System.debug('Hi its working on true conditions'+NoUpdateQLI);
+           lstQuote = [SELECT BillingCity,BillingCountry,BillingLatitude,BillingLongitude,BillingName,BillingPostalCode,BillingState,
+                        BillingStreet,Backup_of_quote_state__c,Backup_of_quote_country__c,CC_Contact_Address__c,City__c,Company_Name__c,Company_Type__c,
+                        ContactId,Contact_No__c,CurrencyIsoCode,Description,Discount,Distributor__c,Email,ExpirationDate,Expiration_Date_Cal__c,
+                        Expires__c,Fax,IsSyncing,Name,Notes__c,OpportunityId,Opportunity.type,Opportunity.AccountId,Opportunity.name,
+                        Opportunity.Account.name,Phone,Phone__c,Pricebook2Id,QuoteNumber,Quote_Address__c,Quote_Disc__c,Reseller__c, 
+                        Subject__c,ShippingCity,ShippingCountry,ShippingHandling,ShippingLatitude,ShippingLongitude,ShippingName,
+                        ShippingPostalCode,ShippingState,ShippingStreet,Status,Street__c,Subtotal,Tax,Terms_and_Conditions__c,Terms_of_Quote__c,
+                        TotalPrice,Total_List_Price__c,Total_Weight__c,URL__c,Warranty__c,(SELECT CurrencyIsoCode,Description,Discount,Discounted_Price__c,LineNumber,ListPrice,PricebookEntryId,
+                        Product_Description__c,Quantity,QuoteId,SortOrder,Subtotal,TotalPrice,UnitPrice,Unit_Weight__c, Quantity__c, Service_Months__c,Group__c,PricebookEntry.Product2.IsActive,PricebookEntry.Product2.Name 
+                        FROM QuoteLineItems) from Quote WHERE Id = :cloneQuoteID ];
+                      system.debug('lstQuote=======>>'+lstQuote);
+            
+            if (lstQuote != null && lstQuote.size() > 0 && lstQuote[0] != null && lstQuote[0].QuoteLineItems != null && lstQuote[0].QuoteLineItems.size()>0)
+        {
+            for(QuoteLineItem objQuoteLine : lstQuote[0].QuoteLineItems)
+            {
+                if(objQuoteLine.PricebookEntry.Product2.IsActive==false){
+                    lstQL.add(objQuoteLine.PricebookEntry.Product2.Name);
+                }
+          
+            }
+        }
+            if(lstQL!=null)
+    Test = string.join(lstQL, ',');
+            
+        System.debug('lstQuoteLineItem-----------------'+lstQuoteLineItem);
+        dummyQuote = new Quote();
+        dummyQuote.Name = 'Copy of ' + lstQuote[0].Name; 
+        oppName=lstQuote[0].Opportunity.name;
+        oppId = lstQuote[0].OpportunityId;
+        StrAccountName=lstQuote[0].Opportunity.AccountId;
+        if(lstQuote[0].Opportunity.Type == 'Campus')
+        {
+            if(lstQuote[0].QuoteLineItems != null && lstQuote[0].QuoteLineItems.size() > 0)
+            {
+                for(QuoteLineItem eachLineItem : lstQuote[0].QuoteLineItems)
+                {
+                    if(eachLineItem.PricebookEntry.Product2.Is_Mojo_Product__c)
+                    {
+                        ErrorMsg = true;
+                        break;
+                    }
+                }   
+            }
+        }
+        
+        system.debug('-------------=============SFDC lstQuote ===========================>>>>  '+lstQuote  );   
+        allrecords=new list<Quote>();
+        system.debug('AccountID------'+lstQuote[0].Opportunity.Account.name);
+        system.debug('oppName'+oppName);
+        system.debug('oppId'+lstQuote[0].OpportunityId);
+        }
+    }
+   
+   //---------------------------Save to insert the cloned record on quote-------------------------------------------------
+    public PageReference save() 
+    {  
+         system.debug( ' AccountName -------SFDC-------->>>'+StrAccountName );
+         system.debug('oppId'+lstQuote[0].Opportunity.Id);
+         
+         if(dummyQuote.Name==null || dummyQuote.Name=='')
+         {
+             ApexPages.addmessage(new ApexPages.message(ApexPages.severity.ERROR,'New Quote name should not be blank'));
+             return null;
+         }
+         if(oppName== null || oppName== '')
+         {
+             ApexPages.addmessage(new ApexPages.message(ApexPages.severity.ERROR,'Opportunity should not be blank'));
+             return null;
+         }
+
+        //------------Comparing the entered opportunity whether it is belonging to same account or not-----------------------------  
+       try{       
+       if(StrAccountName!=null && StrAccountName!='')
+       {
+            String strOppQuery = 'Select id,name,Account.name,AccountId,StageName from Opportunity where AccountId = \'' + StrAccountName + '\'';
+            if(oppId != null && oppId != '')
+                strOppQuery += ' AND id = \'' + oppId + '\'';
+            if(oppName != null && oppName != '')
+                strOppQuery += ' AND name = \'' + oppName + '\'';
+            System.debug('---- strOppQuery: ' + strOppQuery);
+
+            List<Opportunity> lstOpp = Database.query(strOppQuery);
+            System.debug('---- lstOpp: ' + lstOpp);
+
+            if(lstOpp != null && lstOpp.size() > 0)
+            {
+                if(ErrorMsg && lstOpp[0].type!='Campus')
+               {
+                   ApexPages.addmessage(new ApexPages.message(ApexPages.severity.ERROR,'New Opportunity type should be campus, as selected quote contains the mojo product.'));
+                   return null;
+               }
+                else
+                    qtRecord.OpportunityId = lstOpp[0].Id;
+            }
+            else
+            {
+                ApexPages.addmessage(new ApexPages.message(ApexPages.severity.ERROR,'There is no Opportunity found with same currency.'));
+                return null;
+            }
+        }
+        }
+         catch(exception e)
+        {
+            system.debug('The following exception has occurred: '+e.getMessage());
+        }
+        
+     
+        system.debug('oppName'+oppName);
+        system.debug('data for insert -->>'+allrecords);
+      
+        // -------------------------Retrive clone of existing Quote-------------------------------------
+        
+        if(StrAccountName!=null && StrAccountName!='')
+        {
+        lstAccount=[SELECT Id,name,BillingCity,BillingCountry,BillingCountryCode,BillingPostalCode,BillingState,BillingStateCode,BillingStreet,
+        ShippingCity,ShippingCountry,ShippingCountryCode,ShippingPostalCode,ShippingState,ShippingStateCode,ShippingStreet FROM Account where Id = :StrAccountName];
+        }
+      
+        Quote InsertquoteRecord= lstQuote[0].clone(false);
+        system.debug('InsertquoteRecord===================>'+InsertquoteRecord);      
+        system.debug('qtRecord===================>'+qtRecord);
+        
+        InsertquoteRecord.OpportunityId = qtRecord.OpportunityId ;
+        InsertquoteRecord.id = null ; 
+        InsertquoteRecord.Name=dummyQuote.Name;
+         
+       if(lstAccount != null && lstAccount.size()>0)
+        {
+         InsertquoteRecord.BillingCity = lstAccount[0].BillingCity;
+         InsertquoteRecord.BillingCountry = lstAccount[0].BillingCountry;
+         InsertquoteRecord.BillingCountryCode = lstAccount[0].BillingCountryCode;
+         InsertquoteRecord.BillingName = lstAccount[0].name;
+         InsertquoteRecord.BillingPostalCode = lstAccount[0].BillingPostalCode;
+         InsertquoteRecord.BillingState = lstAccount[0].BillingState;
+         InsertquoteRecord.BillingStateCode=lstAccount[0].BillingStateCode;
+         InsertquoteRecord.BillingStreet = lstAccount[0].BillingStreet;
+         InsertquoteRecord.ShippingCity = lstAccount[0].ShippingCity;
+         InsertquoteRecord.ShippingCountry = lstAccount[0].ShippingCountry;
+         InsertquoteRecord.ShippingCountryCode = lstAccount[0].ShippingCountryCode;
+         InsertquoteRecord.ShippingName = lstAccount[0].Name;
+         InsertquoteRecord.ShippingPostalCode = lstAccount[0].ShippingPostalCode;
+         InsertquoteRecord.ShippingState = lstAccount[0].ShippingState;
+         InsertquoteRecord.ShippingStateCode = lstAccount[0].ShippingStateCode;
+         InsertquoteRecord.ShippingStreet = lstAccount[0].ShippingStreet;
+          
+        } 
+        allrecords.add(InsertquoteRecord);
+        System.debug('data for insert -->>'+allrecords);
+       
+         // ======================//
+        // Insert cloned record  //
+       //=======================//
+        try{
+            if(allrecords != null && allrecords.size()>0)
+            {
+                insert allrecords;
+                system.debug('record inserted successfully'+allrecords);
+            }
+        }
+        catch(exception e)
+        {
+            system.debug('=====Exception Occured======'+e);
+        }
+        
+        /* =================
+          Quote Line Item  
+        ===================*/
+        // Condition for do not create quote line items
+        if(!NoUpdateQLI)
+        {
+             List
+							<QuoteLineItem> newQuoteLineItem = New List
+								<QuoteLineItem>();
+        if (lstQuote != null && lstQuote.size() > 0 && lstQuote[0] != null && lstQuote[0].QuoteLineItems != null && lstQuote[0].QuoteLineItems.size()>0)
+        {
+            for(QuoteLineItem objQuoteLine : lstQuote[0].QuoteLineItems)
+            {
+                QuoteLineItem  newQuoteLine =  objQuoteLine.Clone(false,true);
+                newQuoteLine.QuoteId= InsertquoteRecord.id;
+                
+                if(newQuoteLine.UnitPrice != objQuoteLine.ListPrice)
+                    newQuoteLine.UnitPrice = objQuoteLine.ListPrice;
+                if(newQuoteLine.Group__c != objQuoteLine.Group__c)
+                    newQuoteLine .Group__c=objQuoteLine.Group__c;
+                if(objQuoteLine.PricebookEntry.Product2.IsActive)
+                newQuoteLineItem.add(newQuoteLine);
+                
+                
+            }
+            system.debug('Insert before');
+           
+            insert newQuoteLineItem;
+            
+        }
+        System.debug('Insert After ' + newQuoteLineItem);
+        }
+       
+        return new ApexPages.StandardController(InsertquoteRecord).view();
+        
+        /* =============================
+         Redirect on new cloned Quote 
+        ==============================*/
+        system.debug('IDOFSAVE====>'+InsertquoteRecord.id);
+        //QTID=InsertquoteRecord.id;
+        PageReference Pageref = new PageReference('/'+InsertquoteRecord.id);
+        Pageref.setRedirect(true);
+        return Pageref;
+    }
+    
+  public PageReference Ok(){
+    
+        PageReference mynewreff = new PageReference('/apex/QuotesClonePage');// PageReference to duplicate_FinalQuotetemplate
+             mynewreff.getParameters().put('id', ApexPages.currentPage().getParameters().get('id'));
+        system.debug('ID=====>'+ mynewreff.getParameters().put('id', ApexPages.currentPage().getParameters().get('id')));
+    
+        mynewreff.setRedirect(true);
+           return mynewreff;
+    
+  }
+    
+    public PageReference MethodForAccountId()
+    { 
+      StrAccountName=  lstQuote[0].Opportunity.AccountID;   
+     return null;
+    }
+    
+    public PageReference MethodForOppId()
+    {
+    OppId= lstQuote[0].OpportunityId;
+    return null;
+    }
+}

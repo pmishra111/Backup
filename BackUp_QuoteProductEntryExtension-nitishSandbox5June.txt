@@ -1,0 +1,728 @@
+public with sharing class QuoteProductEntryExtension {
+    public Opportunity theOpp {get;set;}
+    public id idQuote;
+    public string aristaAddress;
+    public String searchString {get;set;}
+    private String defaultSortColumn = 'Product2.Name'; /** Set the default sort Column. **/
+    private String sortDirection = 'ASC';
+    public QuoteLineItem[] shoppingCart {get;set;}
+    public priceBookEntry[] AvailableProducts {get;set;}
+    public Pricebook2 theBook {get;set;}       
+    public String toSelect {get; set;}
+    public String toUnselect {get; set;}
+    public Sorter_UTIL wikiUTIL_Sorter {get; set;} public Decimal Total {get;set;}    
+    public Boolean overLimit {get;set;}
+    public Boolean multipleCurrencies {get; set;}    
+    private Boolean forcePricebookSelection = false; 
+    private QuoteLineItem[] forDeletion = new QuoteLineItem[]{};
+    public Integer RemoveCount {get;set;}
+    //hold product family.
+    Public String selProdFamily {get;set;}
+    public Boolean isDafaultProductAdded ; 
+    
+    public List
+<WrapLineItem> lstWrap { get; set; }
+    
+    public QuoteProductEntryExtension(ApexPages.StandardController controller) {
+        lstWrap = new List
+	<WrapLineItem>();
+        // Need to know if org has multiple currencies enabled
+        multipleCurrencies = UserInfo.isMultiCurrencyOrganization();
+        wikiUTIL_Sorter = new Sorter_UTIL(defaultSortColumn, sortDirection);
+        aristaAddress = ApexPages.currentPage().getParameters().get('AristaAdd');
+        // Get information about the Opportunity being worked on
+        Id oppId = [select Id, OpportunityId from Quote where Id = :controller.getRecord().Id limit 1].OpportunityId;
+        isDafaultProductAdded = false;
+        idQuote= controller.getRecord().Id;
+        System.debug('#Gmaj :: idQuote Looks Like : ' + idQuote);
+        if(multipleCurrencies)
+            theOpp = database.query('select Id, Pricebook2Id, Pricebook2.Name, CurrencyIsoCode from Opportunity where Id = \'' + oppId + '\' limit 1');
+        else
+            theOpp = [select Id, Pricebook2Id, PriceBook2.Name from Opportunity where Id = :oppId limit 1];
+        
+        // If products were previously selected need to put them in the "selected products" section to start with
+        // Adding Group__c field in Query by Gaurav Vishwakarma
+        shoppingCart = [select Id,Product_Name__c, Service_Months__c, Quantity, Quantity__c, Product2.Family, TotalPrice, UnitPrice, Description, PriceBookEntryId, PriceBookEntry.Name, PriceBookEntry.IsActive, PriceBookEntry.Product2Id, PriceBookEntry.Product2.Family, PriceBookEntry.Product2.Name, PriceBookEntry.Product2.Discount__c, PriceBookEntry.PriceBook2Id, Discount,Group__c,Quote.Remove_Tariff__c, Quote.Opportunity.Account.Tariff_Fee__c from QuoteLineItem where QuoteId = : idQuote and Quote.OpportunityId=:theOpp.Id Order By Group__c];
+        // Added by Mohit Sharma
+        if(shoppingCart != null && shoppingCart.size() > 0)
+        {
+            for(QuoteLineItem eachQuoteLine : shoppingCart)
+            {
+                lstWrap.add(new WrapLineItem(eachQuoteLine, eachQuoteLine.PriceBookEntry.Product2.Discount__c));
+            }
+            
+           /* List
+		<WrapLineItem> lstWrapTemp = new List
+			<WrapLineItem>();
+            
+            for(WrapLineItem eachWrapLine : lstWrap)
+            {
+                if(eachWrapLine.objQuoteLineItem.Product2.Family == 'Switches')
+                {
+                    lstWrapTemp.add(0, eachWrapLine);
+                }
+                else
+                {
+                    lstWrapTemp.add(eachWrapLine);
+                }
+            }
+            
+            System.debug('----- lstWrapTemp: ' + lstWrapTemp);
+            lstWrap = new List
+				<WrapLineItem>();
+            for(WrapLineItem eachTemp : lstWrapTemp)
+            {
+                lstWrap.add(eachTemp);
+            }
+            */
+        }
+        system.debug('shoppingCart---Ravi ' + shoppingCart);
+        // Check if Opp has a pricebook associated yet
+        //shoppingCart = new List
+					<QuoteLineItem>();
+        //if(Test.isRunningTest())
+          //  theOpp.Pricebook2Id = null;
+        if(theOpp.Pricebook2Id == null){
+            Pricebook2[] activepbs = [select Id, Name from Pricebook2 where isActive = true limit 2];
+            if(activepbs.size() == 2){
+                forcePricebookSelection = true;
+                theBook = new Pricebook2();
+            }
+            else{
+                theBook = activepbs[0];
+            }
+        }
+        else{
+            theBook = theOpp.Pricebook2;
+        }
+        
+        if(!forcePricebookSelection)
+            updateAvailableList();
+    }
+    
+    // this is the 'action' method on the page
+    public PageReference priceBookCheck(){    
+        // if the user needs to select a pricebook before we proceed we send them to standard pricebook selection screen
+        if(forcePricebookSelection){        
+            return changePricebook();
+        }
+        else{        
+            //if there is only one active pricebook we go with it and save the opp
+            if(theOpp.pricebook2Id != theBook.Id){try{theOpp.Pricebook2Id = theBook.Id;update(theOpp);}
+                catch(Exception e){ ApexPages.addMessages(e);}
+            }
+            
+            return null;
+        }
+    }
+       
+    public String getChosenCurrency(){    
+        if(multipleCurrencies)
+            return (String)theOpp.get('CurrencyIsoCode');
+        else
+            return '';
+    }
+    
+    public List
+						<SelectOption> getProductFamilyItems() {
+        List
+							<SelectOption> options = new List
+								<SelectOption>();
+        options.add(new SelectOption('','All'));
+        /*options.add(new SelectOption('Switches','Switches'));
+        options.add(new SelectOption('Software','Software'));
+        options.add(new SelectOption('Transceivers and Cables','Transceivers and Cables'));
+        options.add(new SelectOption('Service','Service'));
+        options.add(new SelectOption('Accessories','Accessories'));
+        options.add(new SelectOption('Shipping and Handling','Shipping and Handling'));*/
+        Schema.DescribeFieldResult fieldResult = Product2.Family.getDescribe();
+        List
+									<Schema.PicklistEntry> ple = fieldResult.getPicklistValues();
+        for( Schema.PicklistEntry f : ple)
+        {
+            options.add(new SelectOption(f.getLabel(), f.getValue()));
+        }       
+        return options;
+    }
+    
+    public List
+										<SelectOption> getSubFamilyItems() {
+        /*List
+											<Product_Series__c> lstProduct_Series = Product_Series__c.getall().values();
+        List
+												<SelectOption> options = new List
+													<SelectOption>();
+        options.add(new SelectOption('','All'));
+        List
+														<string> lstOption = new List
+															<string>();
+        for(Product_Series__c objProductSeries : lstProduct_Series){
+            lstOption.add(objProductSeries.Name);
+        }
+        lstOption.sort();
+        for(string strTemp : lstOption){
+            options.add(new SelectOption(strTemp, strTemp + ' Series'));
+        }*/
+        List
+																<SelectOption> options = new List
+																	<SelectOption>();
+        List
+																		<Product2> lstProduct = [Select ID, Series_Name__c from Product2 where Isactive= true order by Series_Name__c limit 5000];
+        Set
+																			<String> SetSeriesName = New Set<String>();
+        For(Product2 objProduct : lstProduct){
+            SetSeriesName.add(objProduct.Series_Name__c);
+        }
+        
+        options.add(new SelectOption('','All'));
+        for(String strTemp: SetSeriesName){
+            if(strTemp!=null)
+                options.add(new SelectOption(strTemp.toUpperCase(), strTemp));
+        }
+        return options;
+    }
+    
+    String productSubFamily='';
+    
+    public String getProductSubFamily() {
+        return productFamily;
+    }
+    
+    public void setProductSubFamily(String productSubFamily) {
+        this.productSubFamily= productSubFamily;
+    }
+    String productFamily;
+    
+    public String getProductFamily() {
+        return productFamily;
+    }
+    
+    public void setProductFamily(String productFamily) {
+        this.productFamily= productFamily;
+    }
+    
+    public void updateAvailableList() { 
+    string stradd='';   
+        // We dynamically build a query string and exclude items already in the shopping cart
+        /*String qString = 'select Id, Pricebook2Id, IsActive, Product2.Name, Product2.Family, Product2.IsActive, Product2.Discount__c, Product2.Description, UnitPrice from PricebookEntry where IsActive=true and (Product2.Product_Arista_Address__c=:aristaAddress OR Product2.Product_Arista_Address__c=:strAdd) and Product2.IsActive = true and Pricebook2Id = \'' + theBook.Id + '\'';*/
+        
+        String qString;
+        if(aristaAddress!=Null || aristaAddress!=''){
+            qString = 'select Id, Pricebook2Id, IsActive,Product2.Discount__c, Product2.Name,Product2.IsPrivate__c, Product2.Family, Product2.IsActive, Product2.Description, UnitPrice from PricebookEntry where IsActive=true and Product2.IsActive=true and Product2.IsPrivate__c =false and (Product2.Product_Arista_Address__c=:aristaAddress OR Product2.Product_Arista_Address__c=:strAdd) and Pricebook2Id = \'' + theBook.Id + '\'';
+        }
+        if(aristaAddress==Null || aristaAddress==''){
+            qString = 'select Id, Pricebook2Id, IsActive, Product2.Name,Product2.Discount__c, Product2.Family,Product2.IsPrivate__c, Product2.IsActive, Product2.Description, UnitPrice from PricebookEntry where IsActive=true and Product2.IsActive=true and Product2.IsPrivate__c =false and Pricebook2Id = \'' + theBook.Id + '\'';
+        }
+        
+        if(multipleCurrencies)
+            qstring += ' and CurrencyIsoCode = \'' + theOpp.get('currencyIsoCode') + '\'';        
+        // note that we are looking for the search string entered by the user in the name OR description
+        // modify this to search other fields if desired
+        system.debug('searchString----------->>>>' + searchString);
+        if(searchString!=null){
+            qString+= ' and (Product2.Name like \'%' + searchString + '%\' or Product2.Description like \'%' + searchString + '%\')';
+        }
+        
+        system.debug('productFamily----------->>>>' + productFamily);
+        if(productFamily!=null && productFamily!='')
+            qString+= ' and (Product2.Family like \'%' + productFamily+ '%\')';
+        system.debug('productSubFamily ----------->>>>' + productSubFamily );
+        
+        if(productSubFamily !=null && productSubFamily !=''){
+            /*integer intProductName= integer.valueOf(productSubFamily);
+            List
+																				<string> lstName= new List
+																					<string>();
+            string strtemp = '';
+            for(integer i=intProductName; i<intProductName+100; i++){
+                if(strtemp=='')
+                    strtemp= ' (Product2.Name like \'%' + string.valueof(i)+ '%\')';
+                else
+                    strtemp+= ' or (Product2.Name like \'%' + string.valueof(i)+ '%\')';
+            }
+            system.debug('lstName--------->>>>>' + lstName);
+            qString+= ' and ( ' + strtemp + ' )';*/
+            qString+= ' and (Product2.Series_Name__c like \'%' + productSubFamily+ '%\')'; 
+        }
+        
+        
+        system.debug('qString----------->>>>' + qString);
+        Set
+																						<Id> selectedEntries = new Set
+																							<Id>();
+        /*Ravi 25 Feb 2014 Start
+        for(QuoteLineItem d:shoppingCart){
+            selectedEntries.add(d.PricebookEntryId);
+        }
+        Ravi 24Feb 2014 End
+        */
+        if(selectedEntries.size()>0 && selectedEntries!=Null ){
+            String tempFilter = ' and Id not in (';
+            for(Id i : selectedEntries){
+                tempFilter+= '\'' + (String)i + '\',';
+            }
+            String extraFilter = tempFilter.substring(0,tempFilter.length()-1);
+            extraFilter+= ')';
+            
+            qString+= extraFilter;
+        }
+        
+        qString+= ' order by ' + wikiUTIL_Sorter.getColumn() + ' ' + wikiUTIL_Sorter.getSortDirection() +' NULLS LAST';
+        system.debug('qString-----------' + qString);
+        qString+= ' limit 101';
+        
+        system.debug('qString:' +qString);  
+        /*if (!Test.isRunningTest())
+        {      
+            AvailableProducts = database.query(qString);
+        }*/
+        
+        AvailableProducts = database.query(qString);
+         // ========================added by Shahwaz 11 feb 2019============================================================
+        List
+																								<Quote> quoteList = new  List
+																									<Quote>(); 
+        Set
+																										<id> AddOnProductId = new Set
+																											<id>();
+        priceBookEntry[] AddPro = new priceBookEntry[]{}; 
+        if(idQuote !=null)
+        quoteList = [Select id,AccountId,CurrencyIsoCode from Quote where Id = : idQuote limit 1];
+        if(quoteList!= null && quoteList.size()>0)
+        {
+            if(quoteList[0].AccountId != null){
+               List
+																												<User_Product__c> uspList = [select Product__r.ID, User__r.Id,Account_Name__r.Id from User_Product__c where User__r.Id = :UserInfo.getUserId() OR Account_Name__r.Id =:quoteList[0].AccountId];
+                //List<User_Product__c> uspList = [select Product__r.ID, User__r.Id,Account_Name__r.Id from User_Product__c where User__r.Id = :UserInfo.getUserId()]; 
+                if(uspList != null && uspList.size()>0){
+                    for(User_Product__c usp : uspList){
+                        if(usp.Product__r.Id != null){
+                            AddOnProductId.add(usp.Product__r.Id);
+                        }
+                    }
+                }
+            }
+        }
+        if(AddOnProductId!= null && AddOnProductId.size()>0){           
+            if(searchString ==null || searchString ==''){
+                String aopQuery = 'Select id, PriceBook2ID,Product2ID, IsActive,Product2.Discount__c, Product2.Name, Product2.Family, Product2.IsActive, Product2.Description, UnitPrice from PriceBookEntry where Product2.IsPrivate__c = true and IsActive=true and Product2.IsActive=true and Product2ID IN : AddOnProductId and Pricebook2Id = \'' + theBook.Id + '\'';
+                if(productFamily!=null && productFamily!='')
+                    aopQuery+= ' and (Product2.Family like \'%' + productFamily+ '%\')';
+                if(multipleCurrencies)
+                    aopQuery += ' and CurrencyIsoCode = \'' + quoteList[0].get('currencyIsoCode') + '\'';   
+                if(productSubFamily !=null && productSubFamily !='')
+                    aopQuery+= ' and (Product2.Series_Name__c like \'%' + productSubFamily+ '%\')'; 
+                AddPro = Database.query(aopQuery);
+            }
+            else
+            {
+                String aopQuery = 'Select id, PriceBook2ID,Product2ID, IsActive,Product2.Discount__c, Product2.Name, Product2.Family, Product2.IsActive, Product2.Description, UnitPrice from PriceBookEntry where Product2.IsPrivate__c = true and IsActive=true and Product2.IsActive=true and Product2ID IN : AddOnProductId and Pricebook2Id = \'' + theBook.Id + '\'';
+                aopQuery+= ' and (Product2.Name like \'%' + searchString + '%\' or Product2.Description like \'%' + searchString + '%\')';
+                if(productFamily!=null && productFamily!='')
+                    aopQuery+= ' and (Product2.Family like \'%' + productFamily+ '%\')';
+                if(multipleCurrencies)
+                    aopQuery += ' and CurrencyIsoCode = \'' + quoteList[0].get('currencyIsoCode') + '\'';   
+                if(productSubFamily !=null && productSubFamily !='')
+                    aopQuery+= ' and (Product2.Series_Name__c like \'%' + productSubFamily+ '%\')'; 
+                AddPro = Database.query(aopQuery);
+            }
+            
+        }
+        
+        System.debug('AddPro-->>'+AddPro);
+        if(AddPro.size() != null && AddPro.size()>0){
+            for(PriceBookEntry pc : AddPro){
+                AvailableProducts.add(pc);
+            }
+        }
+        
+        // We only display up to 100 results... if there are more than we let the user know (see vf page)
+        if(AvailableProducts.size()==101){
+            AvailableProducts.remove(100);
+            overLimit = true;
+        }
+        else{
+            overLimit=false;
+        }
+    }
+    
+    //===========================================================================
+    // Added by Mohit Sharma to select the related Products of an Product
+    //===========================================================================
+    public void getRelatedProduct(String strProdId)
+    {
+        System.debug('------- strProdId: ' + strProdId);
+        System.debug('selProdFamily---------->'+selProdFamily);
+        Set
+																													<Id> setChildProdId = new Set
+																														<Id>();
+        
+        // This junction object is created to make many to many relationship between products.
+        List
+																															<Product_Junction__c> lstProdJunc = [Select Id, Parent_Product__c, Child_Product__c from Product_Junction__c Where Parent_Product__c =: strProdId];
+        System.debug('------ lstProdJunc: ' + lstProdJunc);
+        if(lstProdJunc != null && lstProdJunc.size() > 0)
+        {
+            for(Product_Junction__c eachChildProd : lstProdJunc)
+            {
+                setChildProdId.add(eachChildProd.Child_Product__c);
+            }
+        }
+        System.debug('------- setChildProdId: ' + setChildProdId);
+        
+        if(setChildProdId != null && setChildProdId.size() > 0)
+        {
+            //List
+																																<PricebookEntry> lstRelatedPriceBook = [Select Id, Pricebook2Id, Product2.Parent_Product__c, IsActive, Product2.Name, Product2.Family, Product2.IsActive, 
+            //                            Product2.Discount__c, Product2.Description, UnitPrice from PricebookEntry Where IsActive = true AND Product2.IsActive = true 
+            //                            AND Product2.Parent_Product__c =: strProdId AND Product2.Parent_Product__r.IsActive = true AND CurrencyISOCOde =: getChosenCurrency() AND Pricebook2Id =: theBook.Id];
+            
+            List<PricebookEntry> lstRelatedPriceBook = [Select Id, Pricebook2Id, Product2.Parent_Product__c, IsActive, Product2.Name, Product2.Family, Product2.IsActive, 
+                                        Product2.Discount__c, Product2.Description, UnitPrice from PricebookEntry Where IsActive = true AND Pricebook2Id =: theBook.Id
+                                        AND Product2.IsActive = true AND Product2Id IN : setChildProdId];
+            System.debug('------- lstRelatedPriceBook: ' + lstRelatedPriceBook);
+            
+            if(lstRelatedPriceBook != null && lstRelatedPriceBook.size() > 0)
+            {
+                for(PriceBookEntry eachPriceBookEntry : lstRelatedPriceBook)
+                {
+                    shoppingCart.add(new QuoteLineItem(QuoteId = idQuote, PriceBookEntry = eachPriceBookEntry, PriceBookEntryId = eachPriceBookEntry.Id, 
+                                    UnitPrice = eachPriceBookEntry.UnitPrice));
+                    lstWrap.add(new WrapLineItem(new QuoteLineItem(QuoteId = idQuote, PriceBookEntry = eachPriceBookEntry, PriceBookEntryId = eachPriceBookEntry.Id, 
+                                UnitPrice = eachPriceBookEntry.UnitPrice), eachPriceBookEntry.Product2.Discount__c));
+                }
+            }
+        }
+        System.debug('isDafaultProductAdded----------------->'+isDafaultProductAdded);
+        //Akshay: Add default product when product family is switch.
+        if(selProdFamily.equalsIgnoreCase('Switches') && String.isNotBlank(idQuote) && !isDafaultProductAdded)
+        {
+            // fetch Quote Is Default Product field value.
+            List
+																																	<Quote> lstQuote = [Select Is_Default_Product__c from Quote where id = : idQuote];
+            if(lstQuote != null && lstQuote.size() > 0 && ! lstQuote[0].Is_Default_Product__c)
+            {
+                List<PricebookEntry> lstRelatedPriceBook2 = [Select Id, Pricebook2Id, Product2.Parent_Product__c, IsActive, Product2.Name, Product2.Family, Product2.IsActive, 
+                                        Product2.Discount__c, Product2.Description, UnitPrice from PricebookEntry Where IsActive = true AND Pricebook2Id =: theBook.Id
+                                        AND Product2.IsActive = true AND Product2.Default_Product__c = true];
+                System.debug('-------Default product lstRelatedPriceBook: ' + lstRelatedPriceBook2);
+                if(lstRelatedPriceBook2 != null && lstRelatedPriceBook2.size() > 0)
+                {
+                    for(PriceBookEntry eachPriceBookEntry : lstRelatedPriceBook2)
+                    {
+                        Integer serMonth = 0;
+                        Integer serDiscount = 0;
+                        System.debug('eachPriceBookEntry.product2.Name--------------------->'+eachPriceBookEntry.product2.Name);
+                        serDiscount = eachPriceBookEntry.product2.Name.equalsIgnoreCase('OEM-C130-AP') ? 0 :(eachPriceBookEntry.product2.Name.equalsIgnoreCase('SS-COGWIFI-1M')? 47 : (eachPriceBookEntry.product2.Name.equalsIgnoreCase('SVC-AP-1M-NB') ? 10 : 0));
+                        serMonth = eachPriceBookEntry.product2.Name.equalsIgnoreCase('OEM-C130-AP') ? 1: 12;
+                        System.debug('serDiscount-------------------->'+serDiscount);
+                        System.debug('serMonth--------->'+serMonth);
+                        shoppingCart.add(new QuoteLineItem(QuoteId = idQuote, PriceBookEntry = eachPriceBookEntry, PriceBookEntryId = eachPriceBookEntry.Id, 
+                            UnitPrice = eachPriceBookEntry.UnitPrice, Discount = serDiscount, Service_Months__c = serMonth, Quantity__c = 10));
+                        lstWrap.add(new WrapLineItem(new QuoteLineItem(QuoteId = idQuote, PriceBookEntry = eachPriceBookEntry, PriceBookEntryId = eachPriceBookEntry.Id, 
+                            UnitPrice = eachPriceBookEntry.UnitPrice, Discount = serDiscount, Service_Months__c = serMonth, Quantity__c =10), eachPriceBookEntry.Product2.Discount__c));
+                    }
+
+                    // add default only once.
+                    isDafaultProductAdded = true;
+                    System.debug('isDafaultProductAdded---------------->'+isDafaultProductAdded);
+                }
+            }
+        }
+        
+        //Use this loop for  duplicacy of records.
+        Set
+																																		<String> setProductName = new Set
+																																			<String>();
+        List
+																																				<WrapLineItem> lstWrapLineTemp = new List
+																																					<WrapLineItem>();
+        for(WrapLineItem eachLine : lstWrap)
+        {
+            if(!setProductName.contains(eachLine.objQuoteLineItem.PriceBookEntry.Product2.Name))
+            {
+                System.debug('----- setProductName: ' + setProductName + '\n---- lstWrapLineTemp: ' + lstWrapLineTemp.size());
+                setProductName.add(eachLine.objQuoteLineItem.PriceBookEntry.Product2.Name);
+                lstWrapLineTemp.add(eachLine);
+            }
+        }
+
+        //lstWrap = new List<WrapLineItem>();
+        //lstWrap.addAll(lstWrapLineTemp);
+    }
+    
+    public void addToShoppingCart(){
+    
+        // This function runs when a user hits "select" button next to a product
+        for(PricebookEntry d : AvailableProducts){
+            if((String)d.Id==toSelect){
+                QuoteLineItem objQouteTemp = new QuoteLineItem(QuoteId=idQuote, PriceBookEntry=d, PriceBookEntryId=d.Id, UnitPrice=d.UnitPrice);
+                shoppingCart.add(objQouteTemp);
+                system.debug('objQouteTemp ------->>>>>>' + objQouteTemp );
+                lstWrap.add(new WrapLineItem(objQouteTemp, d.Product2.Discount__c));
+                system.debug('lstWrap------->>>>>>' + lstWrap);
+                getRelatedProduct(d.Product2Id);
+                break;
+            }
+        }
+        
+        updateAvailableList();  
+    }
+    
+
+    public PageReference removeFromShoppingCart(){
+    
+        System.debug('#Gmaj :: Called....');
+        System.debug('#Gmaj :: toUnselect Looks Like : ' + toUnselect);
+
+        // This function runs when a user hits "remove" on an item in the "Selected Products" section    
+        Integer count = 0;    
+        system.debug('RemoveCount+++++++++++++'+RemoveCount);
+        if(String.isNotEmpty(toUnselect) && String.isNotBlank(toUnselect))
+        {
+            for(QuoteLineItem d : shoppingCart)
+            {
+                System.debug('#Gmaj :: toUnselect Looks Like : ' + toUnselect);
+                System.debug('#Gmaj :: d.PriceBookEntryId Looks Like : ' + d.PriceBookEntryId);
+                // Commented and adding new line for delete single lineitem on duplicate ones
+                //if((String)d.PriceBookEntryId==toUnselect){
+                if((String)d.Id==toUnselect)
+                {
+                    system.debug('Count++++++++++'+count);
+                    if(d.Id!=null)  
+                    forDeletion.add(d);
+                    if(count == RemoveCount-1)
+                    {
+                        shoppingCart.remove(count);
+                        lstWrap.remove(count);
+                        break;
+                    }
+                }
+                count++;
+            }
+        }
+        else if(RemoveCount != null)
+                lstWrap.remove(RemoveCount-1);
+        updateAvailableList();
+        System.debug('#Gmaj :: forDeletion Looks Like : ' + forDeletion);        
+        return null;
+    }
+    
+    public PageReference onSave(){
+    
+        // If previously selected products are now removed, we need to delete them
+        system.debug('#Gmaj :: forDeletion---------'+forDeletion.size());
+        system.debug('#Gmaj :: forDeletion---------'+forDeletion);
+       if(forDeletion.size()>0)
+        try{
+           delete(forDeletion); 
+           //forDeletion.clear();
+            
+            }
+           catch(Exception e)
+            {
+            Apexpages.addmessages(e);
+            }   
+           
+        // Previously selected products may have new quantities and amounts, and we may have new products listed, so we use upsert here
+        try{
+            /*if(shoppingCart.size()>0)
+            {
+                for(QuoteLineItem objQuoteLine: shoppingCart){
+                     if(objQuoteLine.Service_Months__c!=null)  
+                         objQuoteLine.Quantity= objQuoteLine.Quantity__c*objQuoteLine.Service_Months__c; 
+                     else
+                         objQuoteLine.Quantity= objQuoteLine.Quantity__c;
+                     
+                }
+                upsert(shoppingCart);
+            }*/
+            //set of Quote Id's.
+            Set
+																																						<Id> setQuoteIds = new Set<Id>();
+    
+            if(lstWrap != null && lstWrap.size() > 0)
+            {
+                System.debug('lstWrap---------->'+lstWrap);
+                System.debug('lstWrap---------->'+lstWrap.size());
+                List
+																																							<QuoteLineItem> lstLineItemTemp = new List
+																																								<QuoteLineItem>();
+                Map
+																																									<Id, Decimal> mapTariffFee =new Map
+																																										<Id, Decimal>();
+               for(WrapLineItem eachWrap : lstWrap)
+                {
+                    if(eachWrap.decDiscount != null && eachWrap.objQuoteLineItem.Discount == null)
+                        eachWrap.strError = 'Please enter the discount.';
+                    else if((eachWrap.objQuoteLineItem.Discount > eachWrap.decDiscount) || (eachWrap.objQuoteLineItem.Discount < 0.00))
+                        eachWrap.strError = 'Please enter the (+ve) discount less than or equals to ' + eachWrap.decDiscount + ' discount.';
+                    else
+                    {
+                        if(eachWrap.objQuoteLineItem.Service_Months__c != null)
+                             eachWrap.objQuoteLineItem.Quantity= eachWrap.objQuoteLineItem.Quantity__c * eachWrap.objQuoteLineItem.Service_Months__c; 
+                         else
+                             eachWrap.objQuoteLineItem.Quantity= eachWrap.objQuoteLineItem.Quantity__c;
+                        eachWrap.strError = '';
+                       
+                        lstLineItemTemp.add(eachWrap.objQuoteLineItem);
+                        
+                    }
+                    setQuoteIds.add(eachWrap.objQuoteLineItem.QuoteId);   
+                }
+            
+                //List
+																																											<QuoteLineItem> lstWrapTemp = new List
+																																												<QuoteLineItem>();
+            
+                //  Sorting Data  ==============================================
+            
+                 //=====================================
+                for(WrapLineItem eachWrap : lstWrap)
+                {
+                    if((eachWrap.decDiscount != null && (eachWrap.objQuoteLineItem.Discount == null || eachWrap.objQuoteLineItem.Discount < 0.00)) || (eachWrap.objQuoteLineItem.Discount > eachWrap.decDiscount))
+                    {
+                        ApexPages.addMessage(new ApexPages.message(ApexPages.SEVERITY.Error, 'Please enter the valid discount values.'));
+                        return null;
+                    }
+                    
+                  
+                }
+                System.debug('lstLineItemTemp---------->'+lstLineItemTemp);
+                if(lstLineItemTemp != null && lstLineItemTemp.size() > 0)
+                    
+                    upsert(lstLineItemTemp);
+                
+                System.debug('isDafaultProductAdded---------------->'+isDafaultProductAdded);
+                System.debug('clsRecusrsiveCheck.byPassQuoteTrg------------->'+clsRecusrsiveCheck.byPassQuoteTrg);
+                // update Quote to add default product only once.
+                if(isDafaultProductAdded)
+                {
+                    System.debug('Quote update in order to check that default products are added!');
+                    //Check default product checkbox on quote.
+                    Quote updateQuoteRec = new Quote(Id = idQuote, Is_Default_Product__c = true);
+                    try
+                    {
+                        update  updateQuoteRec;
+                        clsRecusrsiveCheck.byPassQuoteTrg = true;
+                    }catch(Exception exp)
+                    {
+                        System.debug('There is an internal error, please reach out admin on this email alias \'sfdc-admin@arista.com\''+exp);
+                    }
+                } 
+            }
+                System.debug('setQuoteIds------------>'+setQuoteIds);     
+                if(setQuoteIds != null && setQuoteIds.size() > 0)
+                {
+                    Map
+																																													<Id, Decimal> mapTariffFee =new Map
+																																														<Id, Decimal>();
+                    List
+																																															<QuoteLineItem> lstAllQuoteLineItem = [Select Product_Name__c, QuoteId,TotalPrice,Quote.Remove_Tariff__c, Quote.Opportunity.Account.Tariff_Fee__c  from QuoteLineItem where QuoteId IN :  setQuoteIds AND (NOT Product_Name__c like '%7130%' ) ];
+                    //Added by Akshay to calculate tariff fee.
+                    String skuName = System.label.TariffFeeNotAppliedPP;
+                    Set
+																																																<String> setSKUName = new Set
+																																																	<String>();
+                    if(String.isNotBlank(skuName))
+                    {
+                        List
+																																																		<String> lstSKUName = skuName.split(',');
+                        setSKUName = new Set<String>(lstSKUName);
+                    }
+
+                    if(lstAllQuoteLineItem != null && lstAllQuoteLineItem.size() > 0)
+                    {
+                        for(QuoteLineItem eachQLI : lstAllQuoteLineItem)
+                        {
+
+                            if(! eachQLI.Quote.Remove_Tariff__c && skuName != null && ! setSKUName.contains(eachQLI.Product_Name__c.subStringBefore('-')) && ! setSKUName.contains(eachQLI.Product_Name__c))
+                            {
+                                Decimal tariffFee = eachQLI.Quote.Opportunity.Account.Tariff_Fee__c != null ? eachQLI.Quote.Opportunity.Account.Tariff_Fee__c/100 : 0.055;
+                                System.debug('Total Price------>'+eachQLI.TotalPrice);
+                                System.debug('tariffFee--------------->'+tariffFee);
+                                System.debug('Total Price------>'+eachQLI.TotalPrice);
+                                if(! mapTariffFee.containsKey(eachQLI.QuoteId))
+                                    mapTariffFee.put(eachQLI.QuoteId, eachQLI.TotalPrice *tariffFee);
+                                else
+                                    mapTariffFee.put(eachQLI.QuoteId, mapTariffFee.get(eachQLI.QuoteId) + eachQLI.TotalPrice * tariffFee);
+                            }
+                        }
+                    }
+
+                    System.debug('mapTariffFee-------->'+mapTariffFee);
+                   
+                    List
+																																																			<Quote> lstToUpdatedQuote = [Select Tariff_Fee__c from Quote where Id IN : setQuoteIds];
+                    if(lstToUpdatedQuote != null && lstToUpdatedQuote.size() > 0)
+                    {
+                       List
+																																																				<Quote> lstUpatedQuote = new List<Quote>();
+                       for(Quote eachUpdatedQuote : lstToUpdatedQuote)
+                       {
+                           if(mapTariffFee != null && mapTariffFee.size() > 0 && mapTariffFee.containsKey(eachUpdatedQuote.id))
+                           {
+                               eachUpdatedQuote.Tariff_Fee__c = mapTariffFee.get(eachUpdatedQuote.Id); 
+                               eachUpdatedQuote.Tariff_Fee_Background__c = mapTariffFee.get(eachUpdatedQuote.Id);
+                               lstUpatedQuote.add(eachUpdatedQuote); 
+                           }
+                           else
+                           {
+                                eachUpdatedQuote.Tariff_Fee__c = null; 
+                                lstUpatedQuote.add(eachUpdatedQuote); 
+                           }
+                       }
+                       System.debug('lstUpatedQuote----------->'+lstUpatedQuote);
+                       if(lstUpatedQuote != null && lstUpatedQuote.size() > 0)
+                       {
+                           update lstUpatedQuote;
+                           // bypass quotelineitem trigger.
+                           clsRecusrsiveCheck.runQuoteLineItemOnce = false;
+                        }
+                    }
+                }
+         }
+        catch(Exception e){
+            ApexPages.addMessages(e);
+            return null;
+        }            
+        // After save return the user to the Opportunity
+        return new PageReference('/' + ApexPages.currentPage().getParameters().get('Id'));
+    }
+    
+    public PageReference onCancel(){ 
+        // If user hits cancel we commit no changes and return them to the Opportunity   
+        return new PageReference('/' + ApexPages.currentPage().getParameters().get('Id'));
+    }
+    
+    public PageReference changePricebook(){
+    
+        // This simply returns a PageReference to the standard Pricebook selection screen
+        // Note that is uses retURL parameter to make sure the user is sent back after they choose    
+        PageReference ref = new PageReference('/oppitm/choosepricebook.jsp');
+        ref.getParameters().put('id',theOpp.Id);
+        ref.getParameters().put('retURL','/apex/opportunityProductEntry?id=' + theOpp.Id);        
+        return ref;
+    }
+     public PageReference sort() { /** Define sorting method. **/
+     /** Do nothing here. **/
+         system.debug('i am here------------');
+         updateAvailableList();
+         return null;
+     }
+     
+     // Added by Mohit Sharma
+    public class WrapLineItem
+    {
+        public Decimal decDiscount { get; set; }
+        public QuoteLineItem objQuoteLineItem { get; set; }
+        public String strError { get; set; }
+        
+        public WrapLineItem(QuoteLineItem objQuoteLineItemTemp, Decimal decDiscountTemp)
+        {
+            this.objQuoteLineItem = objQuoteLineItemTemp;
+            this.decDiscount = decDiscountTemp;
+            this.strError = '';
+        }
+    }
+}

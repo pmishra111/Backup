@@ -1,0 +1,1 @@
+Select count(id), Email, Account.name from contact where Email != null AND( Account.name != null AND Account.Inactive__c !=true AND (Not Email like '%*%')) group by Email,Account.name having count(id) >1 

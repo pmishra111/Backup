@@ -1,0 +1,5 @@
+CaseShare cs = new CaseShare();
+cs.CaseId='5002I00001qpYkm';
+cs.UserOrGroupId='0050G00000ChA3k';
+cs.CaseAccessLevel='Edit';
+insert cs;

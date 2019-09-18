@@ -1,0 +1,93 @@
+/*
+
+By Radhe S, for Tariff on June 10, 2019
+
+*/
+
+public class trgQuoteLineItemHandler2{
+    
+    public static void UpdateProductTariffPlan(list<QuoteLineItem> lstQuoteLi)
+    {
+        set<id> setQtId = new set<id>();
+        
+        if(lstQuoteLi != null && lstQuoteLi.size()>0)
+        {
+            for(QuoteLineItem eachQtli : lstQuoteLi)
+            {  if(eachQtli.Tariff_Fee_Applicable__c != false)     
+                setQtId.add(eachQtli.quoteid);
+            }
+        }
+        list<quote> lstQuote = [select id,Account.Name,Account.BillingCountryCode,Account.Tariff_Fee__c from quote where id =: setQtId];
+       Decimal TariffFeeAccountVal = 0.00;
+        set<string> setBillingCountryCode = new set<string>();
+        
+        if(lstQuote != null && lstQuote.size()>0)
+        {
+            for(quote eachQuote : lstQuote)
+            {
+                setBillingCountryCode.add(eachQuote.Account.BillingCountryCode);
+                IF(eachQuote.Account.Tariff_Fee__c != Null && eachQuote.Account.Tariff_Fee__c != 0.00)
+                {
+                    TariffFeeAccountVal = eachQuote.Account.Tariff_Fee__c;
+                }
+            }
+        }
+        Decimal  totalAmount=0.00;
+        list<QuoteLineItem> lstqtli = [select id ,QuoteId ,Tariff_Fee_Apply_with_country__c,totalprice from QuoteLineItem where Tariff_Fee_Applicable__c !=false AND quoteid =: setQtId];
+        if(lstqtli!= null && lstqtli.size()>0)
+        {
+            
+            For(QuoteLineItem eachQtli : lstqtli)
+            {
+                //if(eachQtli.Tariff_Fee_Applicable__c=true)
+                totalAmount = totalAmount+ eachQtli.totalprice;
+            }
+        }
+        Decimal  TariffFee=0.00;
+        list<Tariff_Plan_Entry__c> lstTariffplanEntry = [select id,Tariff_Plan__c,Country_Code__c,Tariff_Percent__c from Tariff_Plan_Entry__c where Country_Code__c =:setBillingCountryCode];
+        if(TariffFeeAccountVal != Null && TariffFeeAccountVal != 0.00)
+        {
+            if(totalAmount != 0.00)
+            {
+                 TariffFee =TariffFee + totalAmount*TariffFeeAccountVal/100;
+            }
+        }
+        else{
+            if(lstTariffplanEntry != null && lstTariffplanEntry.size()>0)
+            {
+                if(totalAmount != 0.00)
+                {
+                    for(Tariff_Plan_Entry__c  eachTFPl :  lstTariffplanEntry)
+                    {
+                        TariffFee =TariffFee + totalAmount*eachTFPl.Tariff_Percent__c/100;
+                    }
+                }
+            }
+            else
+            {
+                if(totalAmount != 0.00)
+                {
+                    TariffFee = TariffFee + totalAmount*0.055;
+                }
+            }
+        }
+        
+        set<quote> lstUpdateQtli = new set<quote>();
+        if(lstQuoteLi!= null && lstQuoteLi.size()>0)
+        {
+            For(QuoteLineItem eachQtli : lstQuoteLi)
+            {
+                if(TariffFee != 0.00)
+                {quote EachQuoteLineitem = new quote(Id = eachQtli.QuoteId,Tariff_Fee_Apply_with_country__c = TariffFee);
+                 lstUpdateQtli.add(EachQuoteLineitem);
+                }
+            }
+        }
+        if(lstUpdateQtli != null && lstUpdateQtli.size()>0)
+        {
+            list<quote> lstUpdateQtliNew = new list<quote>();lstUpdateQtliNew.addAll(lstUpdateQtli);
+            update lstUpdateQtliNew;
+        }
+    }
+    
+}

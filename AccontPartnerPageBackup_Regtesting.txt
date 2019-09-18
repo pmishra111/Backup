@@ -1,0 +1,141 @@
+<apex:page standardController="Account" extensions="extAccountController">
+<style>
+    .Processing
+    {
+        position: fixed;
+        background: url('/img/loading32.gif');
+        background-repeat: no-repeat;
+        background-position: center;
+       
+        width: 100%;
+        height: 100%;
+        z-index: 1004;
+        left: 0%;
+        top: 0%;
+    
+    }
+</style>
+  <apex:sectionHeader title="Account Edit" subtitle="New Account"/>
+     <apex:form id="formId">
+         <apex:actionStatus id="statusProcessing" startStyleClass="Processing"/>
+         <apex:pageMessages ></apex:pageMessages>
+        
+         <apex:pageBlock title="Account Edit" >
+            <apex:outputPanel id="outputpannelId">
+                <apex:pageBlockTable value="{!lstwrapper}" var="x" rendered="{!if(lstwrapper.size>0,true,false)}">
+                     <apex:column headerValue="Select">
+                       <apex:inputCheckbox value="{!x.isSelected}">
+                           <apex:actionSupport event="onclick" action="{!checkListChecked}" rerender="formId" status="statusProcessing"/>                            
+                       </apex:inputCheckbox>
+                     </apex:column>
+                
+                    <apex:column headerValue="Name">
+                        <apex:outputLink value="/{!x.accObject.id}" target="_blank">
+                            {!x.accObject.Name}
+                        </apex:outputLink>               
+                    </apex:column>
+                    
+                    <apex:column headerValue="Website">
+                            {!x.accObject.website}
+                     </apex:column>
+                    
+                    <apex:column headerValue="Netsuite ID">
+                        {!x.accObject.NetSuiteID__c}
+                    </apex:column>
+                    
+                    <apex:column headerValue="Account Owner">
+                        <apex:outputLink value="/{!x.accObject.OwnerId}" target="_blank">
+                            {!x.accObject.Owner.Name}
+                        </apex:outputLink>
+                    </apex:column>
+                    <!--
+                    <apex:column headerValue="No of Opportunity">
+                        {!x.accObject.No_of_opportunity__c}
+                    </apex:column>
+                    
+                    <apex:column headerValue="Created By">
+                        <apex:outputLink value="/{!x.accObject.CreatedById}" target="_blank">
+                            {!x.accObject.CreatedBy.Name}
+                        </apex:outputLink>
+                    </apex:column>
+                    
+                    <apex:column headerValue="Created Date">
+                        {!x.accObject.CreatedDate}
+                    </apex:column>
+                    
+                    <apex:column headerValue="Last Modify by">
+                        <apex:outputLink value="/{!x.accObject.LastModifiedById}" target="_blank">
+                            {!x.accObject.LastModifiedby.Name}
+                        </apex:outputLink>
+                    </apex:column>
+                    -->
+                    <apex:column headerValue="Active Service Contract %">
+                        {!x.accObject.Active_Service_Contract__c}
+                    </apex:column>
+                    
+                    <apex:column headerValue="Exception for Active Service Contract %">
+                        {!x.accObject.Exception_Service_Percentage__c}
+                    </apex:column>   
+                
+                </apex:pageBlockTable>
+            </apex:outputPanel>  
+             <apex:pageblockButtons >
+                 <apex:commandButton value="Submit" action="{!submit}" rendered="{!if(flag==true && buttonHide==true,true,false)}"/>
+                 <apex:commandButton value="Update Account" action="{!updateAccount}" rendered="{!!buttonHide}"/>
+                 <apex:commandButton value="Save" action="{!SaveEndUser}" status="statusProcessing" rendered="{!!flag}"/>
+                 <apex:commandButton value="Cancel" action="{!Cancel}"/>
+             </apex:pageblockButtons>
+     
+        <apex:pageBlockSection title="Account Information" collapsible="false">
+            <apex:repeat value="{!$ObjectType.Account.FieldSets.PartnerAccountInformation}" var="f">
+                <apex:inputField value="{!acc[f]}" />
+            </apex:repeat>
+            <apex:inputField value="{!acc.Duplicate_Account_Reason__c}" rendered="{!if(lstwrapper.size>0,true,false)}"   />
+        </apex:pageBlockSection>
+        <!--
+        <apex:pageBlockSection title="Service Level" collapsible="false">
+            <apex:repeat value="{!$ObjectType.Account.FieldSets.PartnerServiceLevel}" var="f">
+                <apex:inputField value="{!acc[f]}" />
+            </apex:repeat>
+        </apex:pageBlockSection>
+        -->
+        <apex:pageBlockSection title="Netsuite Information" collapsible="false">
+            <apex:repeat value="{!$ObjectType.Account.FieldSets.PartnerNetsuiteInformation}" var="f">
+                <apex:inputField value="{!acc[f]}" />
+            </apex:repeat>
+        </apex:pageBlockSection>
+        <apex:pageBlockSection title="Partner Information" collapsible="false">
+            <apex:repeat value="{!$ObjectType.Account.FieldSets.PartnerPartnerInformation}" var="f">
+                <apex:inputField value="{!acc[f]}" />
+            </apex:repeat>
+        </apex:pageBlockSection>
+        
+        <!-- commented by Gaurav Vishwakarma for enabling the picklist-->
+        <!--<apex:pageBlockSection title="Address Information" collapsible="false">
+                        <apex:repeat value="{!$ObjectType.Account.FieldSets.PartnerAddressInformation}" var="f" >
+                <apex:inputField value="{!acc[f]}" required="{!f.required}"/>
+            </apex:repeat>
+        </apex:pageBlockSection> -->
+        
+        <!--<apex:pageBlockSection title="Address Information" collapsible="false">
+            <apex:repeat value="{!$ObjectType.Account.FieldSets.DummySet}" var="f">
+                <apex:inputField value="{!acc[f]}"/>
+            </apex:repeat>
+        </apex:pageBlockSection>-->
+        
+        
+        <apex:pageBlockSection title="Address Information" collapsible="false">
+            <apex:repeat value="{!$ObjectType.Account.FieldSets.NewPartnerUserAddressInformation}" var="f">
+                <apex:inputField value="{!acc[f]}"/>
+            </apex:repeat>
+        </apex:pageBlockSection>
+        
+        <apex:pageBlockSection title="Additional Information" collapsible="false">
+            <apex:repeat value="{!$ObjectType.Account.FieldSets.PartnerAdditionalInformation}" var="f">
+                <apex:inputField value="{!acc[f]}" />
+            </apex:repeat>
+        </apex:pageBlockSection>               
+                   
+ </apex:pageBlock>
+ </apex:form>
+</apex:page>

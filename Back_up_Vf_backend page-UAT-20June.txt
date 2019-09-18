@@ -1,0 +1,656 @@
+<apex:page standardController="quote" showHeader="false" sidebar="false" renderAs="PDF" extensions="extQuoteTemplate"  standardStylesheets="false" applyBodyTag="false" applyHtmlTag="false">
+        <html>
+        <head>
+        <apex:includeScript value="https://code.jquery.com/jquery-2.1.4.min.js" />
+       <apex:stylesheet value="{!$Resource.stylesnew}"/>
+      <style type="text/css" media="print">
+
+                       @page {
+                       margin-top:10px;
+
+                                 @top-center {
+
+                                       content: element(header);
+                                       
+
+                               }
+
+                               @bottom-left {
+
+                                     content: element(footer);
+
+                               }
+
+                            }
+
+                                     div.header {
+
+                                      padding: 10px;
+
+                                      <!--position: running(header);-->
+
+                           }
+                       div.footer {
+
+                                display: block;
+
+                             padding: 5px;
+
+                               position: running(footer);
+
+                      }
+
+                                     .pagenumber:before {
+
+                                        content: counter(page);
+
+                       }
+
+                                   .pagecount:before {
+
+                             content: counter(pages);
+
+                        }
+                        
+
+                    </style>
+                    <style type="text/css">
+                         <!-- date : 9-june-2017 added by neha saxena-->
+                         
+                         table {
+                            -fs-table-paginate: paginate;
+                          }
+                    
+            .newpagesection {
+            //background-position: #FBFBFB;
+            border: 1px solid #C1C1C1;
+            background: #FBFBFB;
+            padding: 18px;
+            width: 921px;
+            border-radius: 9px;
+            margin-bottom: 18px;
+            -moz-border-radius: 9px;
+            -webkit-border-radius: 9px;
+            //behavior: url('i/h/border-radius.htc');
+            margin-top: -142px;
+            //margin-left: 22px;
+         }
+         
+            
+          .popup
+        {
+            background-color: white;
+            border-width: 2px;
+            border-style: solid;
+            z-index: 9999;
+            left: 50%;
+            padding:10px;
+            position: absolute;
+            width: 500px;
+            margin-left: -250px;
+            top:80px;
+        }
+
+        .popupBg
+        {
+            background-color:black;
+            opacity: 0.20;
+            filter: alpha(opacity = 70);
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            z-index: 9998;
+        }
+        
+        .TFtableCol tr:nth-child(even){ 
+            background: #FFFFFF; align:center;
+            }
+            
+            .TFtableCol tr:nth-child(odd){
+            background: #ececec;align:center;
+         
+             #wrapping
+             {
+            white-space: pre-wrap; /* css-3 */
+            white-space: -moz-pre-wrap; /* Mozilla, since 1999 */
+            white-space: -pre-wrap; /* Opera 4-6 */
+            white-space: -o-pre-wrap; /* Opera 7 */
+            word-wrap: break-word; /* Internet Explorer 5.5+ */
+             
+            }
+    </style>    
+                      
+                    <div class="header" style="padding-left:100px;">
+
+              <div><apex:image url="https://c.cs14.visual.force.com/resource/1441015598000/AristaLogovfpage" style="width:250px;height:150px;"/>
+                  <table style="text-align:right; float:right; color:#666; font-weight:bold; font-family: Arial, Helvetica, sans-serif; padding-right:50px;">
+                       <tr>
+                           <td>{!qt.Company_Name__c}</td>
+                       </tr>
+                       <tr>
+                           <td>{!qt.Street__c}</td>
+                       </tr>
+                       <tr>
+                           <td>{!qt.City__c}</td>
+                       </tr>
+                       <tr>
+                           <td>{!qt.Phone__c}</td>
+                       </tr>
+                       <tr>
+                           <td>{!qt.URL__c}</td>
+                       </tr>        
+                            
+                    </table>
+              
+              </div>
+              
+              
+                       
+                   
+
+           </div>
+
+ 
+</head>
+
+           
+
+        
+            <body style="color:#666; font-weight:bold; font-family: Arial, Helvetica, sans-serif;" onload="alert();">
+            
+           <apex:form >
+           
+              <div style="margin-left:3%;">
+                <center>
+                <!--
+                    <div class="header" style="float:left; width:30%; margin-top:2%;  margin-left:3%;">
+                      <span>  <apex:image url="https://na10.salesforce.com/resource/1441015598000/AristaLogovfpage" style="width:250px;height:150px;"/></span>
+                      </div>
+                      -->
+                    
+                  <!--  <div style="float:right; height:100px; width:50%; margin-top:2%; margin-right:8%;">
+                       <table style="text-align:right; float:right;">
+                       <tr>
+                           <td>{!qt.Company_Name__c}</td>
+                       </tr>
+                       <tr>
+                           <td>{!qt.Street__c}</td>
+                       </tr>
+                       <tr>
+                           <td>{!qt.City__c}</td>
+                       </tr>
+                       <tr>
+                           <td>{!qt.Phone__c}</td>
+                       </tr>
+                       <tr>
+                           <td>{!qt.URL__c}</td>
+                       </tr>        
+                            
+                    </table>
+                   </div>
+                   --> 
+                    <div style="float:left; height:auto; width:45%; margin-top:2%; margin-left:6.7%; ">
+                        <table style="text-align:left;">
+                            <tr>
+                                <td style="width:30%;color:#383838;"><b>Created Date</b></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td style="width:70%">
+                                <!--<apex:outputText value="{0,date,MM'/'dd'/'yyyy}"> 
+                                    <apex:param value="{!qt.Date__c}"/> 
+                                </apex:outputText> -->
+                                
+                               <apex:outputText value="{0,date}">
+                                <apex:param value="{!Today()}" />
+                            </apex:outputText></td>
+                            </tr>
+                            <tr>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                            </tr>
+                            <tr>
+                                <td style="color:#383838;"><b>Bill To Name</b></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td>{!qt.BillingName}</td>
+                            </tr>
+                            <tr>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                            </tr>
+                            <tr>
+                                <td style="color:#383838;"><b>Bill To</b></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td>{!qt.billingstreet}<br/>{!qt.billingcity} {!qt.billingstatecode}<br/>{!qt.billingcountrycode} <br/>{!qt.BillingPostalCode}</td>
+                            </tr>
+                            
+                            <!--26/12/2018: Neha :  Add Partner Rep Name and Email Field -->
+                            <tr>
+                                <td style="color:#383838; {!IF(partnerName == true,'', 'display: none;')}"><b>Partner Rep Name</b></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td >{!qt.Partner_Rep_Name__c}</td>
+                            </tr>
+                            <tr>
+                                <td style="color:#383838; {!IF(partnerEmail == true,'', 'display: none;')}"><b>Partner Rep Email </b></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td >{!qt.Partner_Rep_Email__c}</td>
+                            </tr>
+                            
+                        </table>
+                    </div>
+                    
+                    <div style="float:right; height:auto; width:46.5%; margin-top:2%;">
+                        <table style="text-align:left;">
+                            <tr>
+                                <td style="color:#383838;"><b>Quote Name</b></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td>{!qt.name}</td>
+                            </tr>
+                            <tr>
+                                <td style="color:#383838;"><b>Quote #</b></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td>{!qt.Quote__c}</td>
+                            </tr>
+                            
+                            <tr>
+                                <td style="color:#383838;"><b>Quote Type</b></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td>{!qt.Quote_Type__c}</td>
+                            </tr>
+                                
+                            <tr>
+                                <td style="color:#383838;"><b>Ship To Name</b></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td>{!qt.ShippingName}</td>
+                            </tr>
+                            
+                            <tr>
+                                <td style="color:#383838;"><b>Ship To </b></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td>{!qt.ShippingCountry}</td>
+                            </tr>
+                            
+                            <tr>
+                                <td style="color:#383838;"><b></b></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td>{!qt.ShippingState}</td>
+                            </tr>
+                            
+                            <tr>
+                                <td style="color:#383838;"><b></b></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td>{!qt.ShippingCity}</td>
+                            </tr>
+                            
+                            <tr>
+                                <td style="color:#383838;"><b></b></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td>{!qt.ShippingStreet}</td>
+                            </tr>
+                            
+                            <tr>
+                                <td style="color:#383838;"><b></b></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td>{!qt.ShippingPostalCode}</td>
+                            </tr>
+                            
+                            <tr>
+                                <td style="color:#383838;"><b>Expiration Date</b></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td></td><td></td><td></td><td></td>
+                                <td>
+                                <!--<apex:outputText value="{0,date,MM'/'dd'/'yyyy}"> 
+                                    <apex:param value="{!qt.Expiration_Date_Cal__c}"/>
+                                </apex:outputText>
+                                -->
+                                <apex:outputText value="{0,date}">
+                                <apex:param value="{!qt.ExpirationDate}" />
+                            </apex:outputText>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div style="float:left; width:100%; margin-top:0.5%;color: #fff;">
+                    <center>
+                        <table id="tb1" style="cellspacing:5px; border-width:0%; width:90%; margin-left:7%; border-collapse:collapse;" class="TFtableCol" border="1px;">
+                        <thead>
+                                    <tr style="background-color:#484848;cellspacing:0px;">
+                                    
+                                    
+                                    <!--add by Gaurav Vishwakarma-->
+                                        
+                                        <th style="color:#fff;text-align:left;">Group</th>
+                                        <th style="color:#fff;text-align:left;">Service Code</th>
+                                        <th style="color:#fff;text-align:left;">Service Code Description</th>
+                                        
+                                        <th style="color:#fff;text-align:center;{!IF(showColumn == 'true','', 'display: none;')}">List Price</th>
+                                        
+                                        <th style="color:#fff;text-align:center;{!IF(showColumn == 'true','', 'display: none;')}">Discount %</th>
+                                        
+                                        <th style="color:#fff;text-align:left;">Discounted Price</th>
+                                        
+                                        
+                                        <th style="color:#fff;text-align:left;">Service Months</th>
+                                        <th style="color:#fff;text-align:left;">Quantity</th>
+                                        <th style="color:#fff;text-align:left;">Dollars saved</th>
+                                        <th style="color:#fff;text-align:left;">Total Price</th>
+                                        
+                                        <!-- added by Gaurav Vishwakarma for goup product total -->
+                                        <!--<th style="color:#fff;text-align:left;">Group Total</th>-->
+                                    </tr>
+                            </thead>
+                            <tbody>
+                                <apex:repeat id="idRepeatShowKeys" value="{!mapStrGpListQuoteItems}" var="eachGroup">
+                                    <apex:variable var="i" value="{!0}"/>
+                                    <tr style="background-color: #eee;">
+                                        <td colspan="10" style="color:#383838; text-align: left;">{!eachGroup}</td>
+                                    </tr>
+                                    <apex:repeat id="idRepeatShowValues" value="{!mapStrGpListQuoteItems[eachGroup]}" var="eachQuoteLineItem">
+                                        <tr>
+                                            <td></td>
+                                            <td style="color:#383838;text-align:left;">
+                                            {!eachQuoteLineItem.Product2.Name}
+                                            </td>
+                                            <td style="color:#383838;text-align:left; padding-left:10px;">
+                                                {!eachQuoteLineItem.Product_Description__c}
+                                            </td>
+                                            <td style="color:#383838;text-align:center; {!IF(showColumn == 'true','', 'display: none;')}">
+                                                {!ISOCode}
+                                                <apex:outputText value="{0, Number,#,##0.00}">
+                                                    <apex:param value="{!eachQuoteLineItem.ListPrice}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td style="color:#383838;text-align:center; {!IF(showColumn == 'true','', 'display: none;')}">
+                                                {!eachQuoteLineItem.Discount}
+                                            </td>
+                                            <td style="color:#383838;text-align:right;">
+                                                {!ISOCode}
+                                                <apex:outputText value="{0, Number,#,##0.00}">
+                                                    <apex:param value="{!eachQuoteLineItem.Discounted_Price__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td style="color:#383838;text-align:center;">
+                                                {!eachQuoteLineItem.Service_Months__c}
+                                            </td>
+                                            <td style="color:#383838;text-align:center;">
+                                                {!eachQuoteLineItem.Quantity__c}
+                                            </td>
+                                             <td style="color:#383838;text-align:right;">
+                                                {!ISOCode}
+                                                <apex:outputText value="{0, Number,#,##0.00}">
+                                                    <apex:param value="{!eachQuoteLineItem.Dollars_saved_per_line_item__c}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <td style="text-align:right;color:#383838; width:90px;">
+                                                {!ISOCode}
+                                                <apex:outputText value="{0, Number,#,##0.00}">
+                                                    <apex:param value="{!if(eachQuoteLineItem.Service_Months__c==null,ROUND(eachQuoteLineItem.Discounted_Price__c,2)*eachQuoteLineItem.Quantity__c,ROUND(eachQuoteLineItem.Discounted_Price__c,2)*eachQuoteLineItem.Quantity__c*eachQuoteLineItem.Service_Months__c)}"/>
+                                                </apex:outputText>
+                                            </td>
+                                            <!-- Commented by Gaurav Vishwakarma for stop diplaying twice calculation -->
+                                            <!--<td style="text-align:right;color:#383838; width:90px;">
+                                                {!ISOCode}
+                                                <apex:outputText value="{0, Number}">
+                                                    <apex:param value="{!if(eachQuoteLineItem.Service_Months__c==null,ROUND(eachQuoteLineItem.Discounted_Price__c,2)*eachQuoteLineItem.Quantity__c,ROUND(eachQuoteLineItem.Discounted_Price__c,2)*eachQuoteLineItem.Quantity__c*eachQuoteLineItem.Service_Months__c)}"/>
+                                                </apex:outputText>
+                                            </td>-->
+                                            <td style="color: #383838; display: none;">
+                                                {!if(eachQuoteLineItem.Service_Months__c==null,ROUND(eachQuoteLineItem.Discounted_Price__c,2)*eachQuoteLineItem.Quantity__c,ROUND(eachQuoteLineItem.Discounted_Price__c,2)*eachQuoteLineItem.Quantity__c*eachQuoteLineItem.Service_Months__c)} 
+                                                ---- 
+                                                <apex:variable var="i" value="{!i + if(eachQuoteLineItem.Service_Months__c==null,ROUND(eachQuoteLineItem.Discounted_Price__c,2)*eachQuoteLineItem.Quantity__c,ROUND(eachQuoteLineItem.Discounted_Price__c,2)*eachQuoteLineItem.Quantity__c*eachQuoteLineItem.Service_Months__c)}"/>
+                                            
+                                            </td>
+                                        </tr>
+                                    </apex:repeat>
+                                    <tr style="color: #383838">
+                                        <td colspan="10" style="text-align: right;">
+                                            Sub Total {!ISOCode}
+                                            <apex:outputText value="{0, Number,#,##0.00}">
+                                                <apex:param value="{!i}"/>
+                                            </apex:outputText>
+                                        </td>
+                                    </tr>  
+                                </apex:repeat>
+                            </tbody>    
+                        </table>
+                       
+                        <br/>
+                        </center>
+                    </div>
+                    
+                    <div style="float:left; background-color:#BCD2EE; width:87%; height:25px; margin-top:2%; margin-left:6.8%;">
+                        <!--<h4 style="margin-left:-95%;">Totals</h4>-->
+                        <table style="float:left; text-allign:left;">
+                            <tr>
+                                <td><b>Totals</b></td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div style="float:left; width:65%; height:40px; margin-left:6.8%; margin-top:.5%;">
+                        <!--<h4 style="margin-left:90%;">Grand Total</h4>-->
+                        <table style="float:right; text-allign:right;">
+                             <tr>
+                                <td><b>Total Price</b></td>
+                            </tr> 
+                            <tr>
+                                <td><b>Tax</b></td>
+                            </tr>
+                            
+                            <tr>
+                                <td><b>Shipping and Handling</b></td>
+                            </tr>
+                            <tr>
+                                <td><b>Tariff Fee %</b></td>
+                            </tr>
+                            <tr>
+                                <td><b>Tariff Fee</b></td>
+                            </tr>
+                            <tr>
+                                <td><b>Grand Total</b></td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div></div>
+                    <div style="float:left; width:21%; height:40px; margin-top:.5%;">
+                        <!--<h4 style="margin-left:65%;">USD 24,453.45</h4>-->
+                        <table style="float:right; text-allign:right;">
+                            <tr>
+                                <td>
+                                    {!qt.CurrencyIsoCode}&nbsp;&nbsp;
+                                    <apex:outputText value="{0, Number}"> 
+                                     <!-- <apex:param value="{!qt.TotalPrice}"/> -->
+                                     <apex:param value="{!calSum}"/>
+                                    </apex:outputText>
+                                   </td>
+                            </tr>
+                            
+                            <tr>
+                                
+                                <td>
+                                    {!qt.CurrencyIsoCode}&nbsp;&nbsp;
+                                    <apex:outputText value="{0, Number}"> 
+                                     <apex:param value="{!qt.Tax}"/>
+                                    </apex:outputText>
+                                   </td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    {!qt.CurrencyIsoCode}&nbsp;&nbsp; 
+                                    <apex:outputText value="{0, Number}"> 
+                                     <apex:param value="{!qt.ShippingHandling}"/>
+                                    </apex:outputText>
+                                   </td>
+                            </tr>
+                              <tr>
+                                <td>
+                                    <apex:outputText value="{0,number,0.00}%">
+                                     <apex:param value="{!qt.Tafiff_Fee_Percent__c}"/>
+                                    </apex:outputText>
+                                   </td>
+                            </tr>
+                           <tr>
+                                <td>{!qt.CurrencyIsoCode}&nbsp;&nbsp;
+                                    <apex:outputText value="{0, Number}">
+                                     <apex:param value="{!ROUND(qt.Tariff_Fee__c,2)}"/>
+                                    </apex:outputText>
+                                   </td>
+                            </tr>
+                            <tr>
+                                <td>{!qt.CurrencyIsoCode}&nbsp;&nbsp;
+                                    <apex:outputText value="{0, Number}">
+                                       <!-- <apex:param value="{!calSum}"/> -->
+                                       <!-- <apex:param value="{!qt.Grand_TotalFF__c}"/> -->
+                                       <!-- <apex:param value="{!ROUND(calSum + qt.Tariff_Fee__c, 2)}"/>  -->
+                                     <!--<apex:param value="{!ROUND(calSum +  IF(qt.Tariff_Fee__c!=null ,qt.Tariff_Fee__c,0), 2)}"/> -->
+                                    
+                                        <apex:param value="{!ROUND(calSum + IF(qt.Tariff_Fee__c!=null ,qt.Tariff_Fee__c,0) + IF(qt.Tax != null, qt.Tax, 0) + IF(qt.ShippingHandling != null, qt.ShippingHandling, 0), 2)}"/>  
+                                    </apex:outputText>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div style="float:left; margin-right:5%">
+                        <table style="float:left; margin-left:7%;table-layout:fixed; ">
+
+                            <tr>
+                                <td style="width:22%; text-align:left;"><b>Notes</b></td>
+                                 
+                            </tr>
+                            <tr>
+                                <!--<td style="text-align:justify; white-space:pre;">{!qt.Notes__c}</td>
+                                <td style=" text-align:justify; white-space:pre; word-wrap:break-word; word-break:break-all; width:46.5%;" >
+                                <apex:outputText value="{!qt.Notes__c}" escape="false">
+                                        <apex:param name="note" value="{!qt.Notes__c}"  /> 
+                                    </apex:outputText>-->
+                                <td>
+                                
+                                    <apex:outputPanel layout="block" style="width:100%;overflow:visible;text-align: left;">
+                                        <apex:outputField value="{!qt.Notes__c}"></apex:outputField>
+                                    </apex:outputPanel>
+                               
+                               </td>
+                                
+                                
+                            </tr>  
+                            <tr>
+                                <td style="width:22%; text-align:left;"><b>Prepared By</b></td>
+                            </tr>
+                            <tr>
+                                <td style="text-align:left;">{!userName}</td>
+                            </tr>
+                           
+                            <tr>
+                                <td style="width:22%; text-align:left;"><b>E-mail</b></td>
+                            </tr>
+                            <tr>
+                                <td style="text-align:left;">{!userEmail}</td>
+                            </tr>
+                             <!--Added By Chetan Dabas on 4th January 2019-->
+                               <tr>
+                                <td></td>
+                            </tr>
+                            <tr> 
+                              <td style="text-align:left;">The below terms apply to your purchase of Arista products and services unless you have executed a separate written agreement with Arista in such case, those terms apply.  </td> 
+                              
+                            </tr>
+                            
+                        </table>
+                    </div>
+                    
+                    
+                    <div style="float:left; width:87%; background-color:#BCD2EE; margin-top:3%; margin-left:6.75%; height:25px;">
+                        <!--<h4 style="margin-right:90%;">Payment Terms:</h4>-->
+                        <table style="float:left; text-allign:left;">
+                            <tr>
+                                <td><b>Payment Terms:</b></td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    </center>
+                    
+                    <div style="float:left; width:81%;margin-left:6.75%;margin-bottom:6.75%;text-aligh:justify;">
+                    
+                        <div style="line-height:20px">
+                        Payment Terms <b>{!qt.Terms_of_Quote__c}</b><br/>
+                        <apex:outputText value="{!qt.Update_Terms_of_quote__c}" escape="false"/>
+                      <!--  All prices quoted are in USD unless otherwise stated<br/>
+                        Shipment is EXW (Incoterms 2000). By default, all items are shipped via Fedex Express Saver<br/>
+                        All prices exclude any federal, state or local taxes<br/>
+                        Shipping costs are estimates only and are subject to change, based on then current freight and foreign currency rates<br/>
+                        For delivery outside the US, duties, VAT or similar taxes are not included in the list price<br/>
+                        The terms and conditions of this Quotation include the following documents by reference:<br/>
+                        Arista Warranty<br/>
+                        <a href="https://www.arista.com/assets/data/pdf/Warranty.pdf">https://www.arista.com/assets/data/pdf/Warranty.pdf</a><br/>
+                        Software End User License Agreement<br/>
+                        <a href="https://www.arista.com/assets/data/pdf/software-agreement/EndUserLicenseAgreement.pdf">
+                        https://www.arista.com/assets/data/pdf/software-agreement/EndUserLicenseAgreement.pdf</a><br/><br/>
+                        <span style="display:{!IF(showSection == true, 'block', 'none')};">
+                        Any Arista A-Care Services purchased under this Quotation shall be subject to the terms and conditions of Arista's Master Services Agreement<br/>
+                        <a href="https://www.arista.com/assets/data/pdf/MasterServicesAgreement.pdf">https://www.arista.com/assets/data/pdf/MasterServicesAgreement.pdf
+                        </a><br/><br/>
+                        </span>
+                       
+                        This quote is valid for 30 days and is confidential between Arista Networks and the customer named on this quote. This quote may not be
+                        distributed to third parties without prior written consent from Arista Networks. This quote is an offer, and a purchase order issued pursuant to
+                        this quote shall constitute acceptance of the offer, with any different or additional terms excised.<br/>
+                        Training SKUs are refundable only up to 31 days before the event--inside of 31 days before the class you will be invoiced for non-attendance.
+                      -->  </div>
+                        
+                                             
+                    </div>
+                </div>
+                
+                
+                 <!-- Pop Up Code Starts-->    
+                
+                        <!--<apex:outputPanel id="popup">
+                        <apex:outputPanel styleClass="popupBg" layout="block" rendered="{!displayPopUp}"/>
+                            <apex:outputPanel styleClass="popup" layout="block" rendered="{!displayPopUp}">
+                            <br/><br/><br/>
+                            <center>
+                            <p><b>Please enter Email Details :</b>
+                            </p>
+                                    To Address :&nbsp;&nbsp;&nbsp;<apex:inputField style="width:70%;height:20px;" value="{!qt.To_Address__c}"/><br/>
+                                    <apex:outputPanel rendered="{!errorEmail}" style="color:red;text:align:left;">Please enter correct email id(s)</apex:outputPanel><br/>
+                                    CC Address :&nbsp;&nbsp;&nbsp;<apex:inputField style="width:70%;height:20px;" value="{!qt.CC_Address__c}"/><br/>
+                                    <apex:outputPanel rendered="{!errorEmailcc}" style="color:red;text:align:left;">Please enter correct email id(s)</apex:outputPanel><br/><br/><br/><br/>
+                                    <div style="float:left;width:auto;margin-left:20px">Email Body :</div><apex:inputField style="width:70%;height:100px;" value="{!qt.Email_Body__c}" required="true"/>
+                                   
+                            </center>
+                            <br/><br/><br/><br/>
+                            <center><apex:commandButton value="Save and Email Quote" action="{!saveAndEmailQuote}"/>&nbsp;&nbsp;&nbsp;
+                            <apex:commandButton value="Cancel" action="{!cancelPopup}" immediate="true"/></center>    
+                            </apex:outputPanel>
+                        </apex:outputPanel>-->
+                       
+                       <!-- Pop Up Code Ends-->
+            </apex:form>
+            
+          
+                        
+            </body>
+            
+        </html>
+        
+        
+        
+</apex:page>

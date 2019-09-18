@@ -1,0 +1,107 @@
+<aura:component controller="addDeleteController" Implements="force:lightningQuickActionWithoutHeader,force:hasRecordId,flexipage:availableForAllPageTypes">
+    
+    <aura:attribute name="ScheduleList" type="Schedule_Interview__c[]"/> 
+    <lightning:recordEditForm aura:id="recordViewForm"
+                              objectApiName="Schedule_Interview__c">
+        <lightning:messages />
+        <div class="slds-m-around--xx-large">
+            <div class="slds-float_right slds-p-bottom_small">
+                <h1 class="slds-page-header__title">Add Row 
+                    <lightning:buttonIcon iconName="utility:add"  size="large" variant="bare" alternativeText="Add" onclick="{!c.addRow}"/>
+                </h1>
+            </div>
+            <div class="container-fluid">        
+                <table class="slds-table slds-table_bordered slds-table_cell-buffer"> 
+                    <thead>
+                        <tr class="slds-text-title_caps">
+                            <th scope="col">
+                                <div class="slds-truncate">#</div>
+                            </th>
+                            <div class="slds-grid slds-gutters">
+                                <div class="slds-col">
+                                    <span>
+                                        <th scope="col">
+                                            <div class="slds-truncate" title="Candidate Name">Candidate Name</div>
+                                        </th>
+                                        <th scope="col">
+                                            <div class="slds-truncate" title="Email Address">Email Address</div>
+                                        </th>
+                                        <th scope="col">
+                                            <div class="slds-truncate" title="Phone">Phone</div>
+                                        </th>
+                                    </span>
+                                </div>
+                                <div class="slds-col">
+                                    <span>
+                                        <th scope="col">
+                                            <div class="slds-truncate" title="Interviewer Name">Interviewer Name</div>
+                                        </th>
+                                        <th scope="col">
+                                            <div class="slds-truncate" title="Schedule Interview">Schedule Interview</div>
+                                        </th>
+                                        
+                                    </span>
+                                </div>
+                                <div class="slds-col">
+                                    <span>
+                                        
+                                        <th scope="col">
+                                            <div class="slds-truncate" title="Profile">Profile</div>
+                                        </th>
+                                        <th scope="col">
+                                            <div class="slds-truncate" title="Mode of Interview">Mode of Interview</div>
+                                        </th>
+                                         <th scope="col">
+                                            <div class="slds-truncate" title="Round Number">Round Number</div>
+                                        </th>
+                                    </span>
+                                </div>
+                            </div>
+                        </tr>
+                    </thead>   
+                    <tbody>      
+                        <aura:iteration items="{!v.ScheduleList}" var="sch" indexVar="index">
+                            <tr>
+                                <td> 
+                                    {!index + 1}
+                                </td>
+                                <div class="slds-grid slds-grid_vertical-align-center" style="height:200px"> 
+                                    <div class="slds-col">
+                                        <span><lightning:inputField fieldName="Candidate_Name__c" variant="label-hidden" />
+                                            <lightning:inputField fieldName="Email_Address__c" variant="label-hidden" />
+                                            <lightning:inputField fieldName="Phone__c" variant="label-hidden" /></span>
+                                    </div>
+                                    <div class="slds-col">
+                                        <span> <lightning:inputField fieldName="Interviewer_Name__c" variant="label-hidden" />
+                                              <lightning:inputField fieldName="Schedule_Interview__c" variant="label-hidden" /> 
+                                           </span>
+                                    </div>
+                                    <div>
+                                                <span>
+                                          <lightning:inputField fieldName="Round_Number__c" variant="label-hidden" /> 
+                                                    <lightning:inputField fieldName="Profile__c" variant="label-hidden" /> 
+                                            <lightning:inputField fieldName="Mode_of_Interview__c"  variant="label-hidden"/> 
+                                            
+                                        </span>
+                                              </div>
+                                </div>
+                                <td>
+                                    <a onclick="{!c.removeRow}" data-record="{!index}">
+                                        <lightning:icon iconName="utility:delete" size="small"/>
+                                        <span class="slds-assistive-text">Delete</span>
+                                    </a>
+                                </td> 
+                            </tr>
+                        </aura:iteration>
+                    </tbody>
+                </table>
+                <div class="slds-align_absolute-center slds-p-top_small">
+                    <lightning:button variant="brand" label="Submit" title="Brand action" onclick="{!c.save}" />
+                    
+                </div>
+                
+            </div>
+            
+        </div>
+    </lightning:recordEditForm>
+</aura:component>
